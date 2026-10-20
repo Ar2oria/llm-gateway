@@ -1,0 +1,35 @@
+{
+  "direction": "responses_to_anthropic_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_output_tokens": 500,
+    "reasoning": {
+      "effort": "high"
+    },
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Hello"
+      }
+    ]
+  },
+  "name": "r2ar_reasoning_high",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello"
+      }
+    ],
+    "thinking": {
+      "type": "enabled",
+      "budget_tokens": 10240
+    },
+    "output_config": {
+      "effort": "high"
+    }
+  }
+}

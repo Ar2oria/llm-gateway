@@ -1,0 +1,66 @@
+{
+  "direction": "chat_to_responses_request",
+  "input": {
+    "model": "gpt-4o",
+    "max_tokens": 500,
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "Get weather",
+          "parameters": {
+            "type": "object",
+            "properties": {}
+          }
+        }
+      }
+    ],
+    "tool_choice": {
+      "type": "function",
+      "function": {
+        "name": "get_weather"
+      }
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      }
+    ],
+    "stream": true
+  },
+  "name": "c2r_tool_choice_nested",
+  "output": {
+    "model": "gpt-4o",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Hi"
+      }
+    ],
+    "max_output_tokens": 500,
+    "stream": true,
+    "tools": [
+      {
+        "type": "function",
+        "name": "get_weather",
+        "description": "Get weather",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        },
+        "strict": false
+      }
+    ],
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false,
+    "tool_choice": {
+      "name": "get_weather",
+      "type": "function"
+    }
+  }
+}

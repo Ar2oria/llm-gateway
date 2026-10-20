@@ -1,0 +1,38 @@
+{
+  "direction": "responses_to_chat_request",
+  "input": {
+    "model": "gpt-4o",
+    "instructions": "Be brief.",
+    "input": [
+      {
+        "type": "message",
+        "role": "developer",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Dev rules."
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Hi"
+      }
+    ]
+  },
+  "name": "r2cr_instructions_and_developer",
+  "output": {
+    "model": "gpt-4o",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Be brief.\n\nDev rules."
+      },
+      {
+        "role": "user",
+        "content": "Hi"
+      }
+    ]
+  }
+}

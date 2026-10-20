@@ -1,0 +1,37 @@
+{
+  "direction": "responses_to_anthropic_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "instructions": "Be brief.",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Hello"
+          }
+        ]
+      }
+    ],
+    "max_output_tokens": 500
+  },
+  "name": "r2ar_basic",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "system": "Be brief.",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "text": "Hello",
+            "type": "text"
+          }
+        ]
+      }
+    ]
+  }
+}

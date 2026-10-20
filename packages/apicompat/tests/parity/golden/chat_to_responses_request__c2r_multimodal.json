@@ -1,0 +1,51 @@
+{
+  "direction": "chat_to_responses_request",
+  "input": {
+    "model": "gpt-4o",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "what is this"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,aGk="
+            }
+          }
+        ]
+      }
+    ],
+    "stream": true
+  },
+  "name": "c2r_multimodal",
+  "output": {
+    "model": "gpt-4o",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "what is this"
+          },
+          {
+            "type": "input_image",
+            "image_url": "data:image/png;base64,aGk="
+          }
+        ]
+      }
+    ],
+    "max_output_tokens": 500,
+    "stream": true,
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "direction": "anthropic_to_chat_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather?"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "I should call the tool.",
+            "signature": "sig1"
+          },
+          {
+            "type": "text",
+            "text": "Checking."
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_01A",
+            "name": "get_weather",
+            "input": {
+              "city": "Paris"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_01A",
+            "content": "18C"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "thanks"
+      }
+    ]
+  },
+  "name": "a2c_tool_history",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather?"
+      },
+      {
+        "role": "assistant",
+        "content": "Checking.",
+        "reasoning_content": "I should call the tool.",
+        "tool_calls": [
+          {
+            "id": "toolu_01A",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\":\"Paris\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "18C",
+        "tool_call_id": "toolu_01A"
+      },
+      {
+        "role": "user",
+        "content": "thanks"
+      }
+    ],
+    "max_completion_tokens": 500,
+    "parallel_tool_calls": true,
+    "reasoning_effort": "medium"
+  }
+}

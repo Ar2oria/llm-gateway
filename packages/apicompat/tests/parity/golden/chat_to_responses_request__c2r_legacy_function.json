@@ -1,0 +1,55 @@
+{
+  "direction": "chat_to_responses_request",
+  "input": {
+    "model": "gpt-4o",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": "go"
+      },
+      {
+        "role": "assistant",
+        "content": null,
+        "function_call": {
+          "name": "run",
+          "arguments": "{}"
+        }
+      },
+      {
+        "role": "function",
+        "name": "run",
+        "content": "done"
+      }
+    ],
+    "stream": true
+  },
+  "name": "c2r_legacy_function",
+  "output": {
+    "model": "gpt-4o",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "go"
+      },
+      {
+        "type": "function_call",
+        "call_id": "call_legacy_1",
+        "name": "run",
+        "arguments": "{}"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_legacy_1",
+        "output": "done"
+      }
+    ],
+    "max_output_tokens": 500,
+    "stream": true,
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false
+  }
+}

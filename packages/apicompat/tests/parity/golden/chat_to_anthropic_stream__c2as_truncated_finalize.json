@@ -1,0 +1,92 @@
+{
+  "direction": "chat_to_anthropic_stream",
+  "finalize": true,
+  "inputs": [
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant",
+            "content": ""
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "content": "partial"
+          },
+          "finish_reason": null
+        }
+      ]
+    }
+  ],
+  "name": "c2as_truncated_finalize",
+  "output": [
+    {
+      "type": "message_start",
+      "message": {
+        "id": "chatcmpl-1",
+        "type": "message",
+        "role": "assistant",
+        "content": [],
+        "model": "m",
+        "stop_reason": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0
+        }
+      }
+    },
+    {
+      "type": "content_block_start",
+      "index": 0,
+      "content_block": {
+        "text": "",
+        "type": "text"
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 0,
+      "delta": {
+        "type": "text_delta",
+        "text": "partial"
+      }
+    },
+    {
+      "type": "content_block_stop",
+      "index": 0
+    },
+    {
+      "type": "message_delta",
+      "delta": {
+        "stop_reason": "end_turn"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0
+      }
+    },
+    {
+      "type": "message_stop"
+    }
+  ]
+}

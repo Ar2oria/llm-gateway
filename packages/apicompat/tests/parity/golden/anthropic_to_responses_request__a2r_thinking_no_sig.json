@@ -1,0 +1,65 @@
+{
+  "direction": "anthropic_to_responses_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "unsigned thought"
+          },
+          {
+            "type": "text",
+            "text": "answer"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "go on"
+      }
+    ]
+  },
+  "name": "a2r_thinking_no_sig",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "input": [
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "answer"
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "go on"
+          }
+        ]
+      }
+    ],
+    "max_output_tokens": 500,
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false,
+    "parallel_tool_calls": true,
+    "reasoning": {
+      "effort": "medium",
+      "summary": "auto"
+    },
+    "text": {
+      "verbosity": "medium"
+    }
+  }
+}

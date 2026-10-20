@@ -1,0 +1,29 @@
+{
+  "direction": "responses_to_anthropic_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_output_tokens": 500,
+    "temperature": 0.5,
+    "top_p": 0.9,
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Hello"
+      }
+    ]
+  },
+  "name": "r2ar_temperature",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello"
+      }
+    ],
+    "temperature": 0.5,
+    "top_p": 0.9
+  }
+}

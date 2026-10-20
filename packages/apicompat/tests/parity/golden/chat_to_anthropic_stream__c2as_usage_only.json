@@ -1,0 +1,53 @@
+{
+  "direction": "chat_to_anthropic_stream",
+  "finalize": true,
+  "inputs": [
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [],
+      "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15
+      }
+    }
+  ],
+  "name": "c2as_usage_only",
+  "output": [
+    {
+      "type": "message_start",
+      "message": {
+        "id": "chatcmpl-1",
+        "type": "message",
+        "role": "assistant",
+        "content": [],
+        "model": "m",
+        "stop_reason": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0
+        }
+      }
+    },
+    {
+      "type": "message_delta",
+      "delta": {
+        "stop_reason": "end_turn"
+      },
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0
+      }
+    },
+    {
+      "type": "message_stop"
+    }
+  ]
+}

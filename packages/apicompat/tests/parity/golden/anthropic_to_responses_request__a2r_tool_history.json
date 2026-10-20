@@ -1,0 +1,99 @@
+{
+  "direction": "anthropic_to_responses_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather in Paris?"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "I should call the tool.",
+            "signature": "sig-abc123"
+          },
+          {
+            "type": "text",
+            "text": "Checking."
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_01A",
+            "name": "get_weather",
+            "input": {
+              "city": "Paris"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_01A",
+            "content": "18C rainy"
+          }
+        ]
+      }
+    ]
+  },
+  "name": "a2r_tool_history",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Weather in Paris?"
+          }
+        ]
+      },
+      {
+        "type": "reasoning",
+        "encrypted_content": "sig-abc123"
+      },
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "Checking."
+          }
+        ]
+      },
+      {
+        "type": "function_call",
+        "call_id": "toolu_01A",
+        "name": "get_weather",
+        "arguments": "{\"city\":\"Paris\"}"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "toolu_01A",
+        "output": "18C rainy"
+      }
+    ],
+    "max_output_tokens": 500,
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false,
+    "parallel_tool_calls": true,
+    "reasoning": {
+      "effort": "medium",
+      "summary": "auto"
+    },
+    "text": {
+      "verbosity": "medium"
+    }
+  }
+}

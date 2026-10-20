@@ -1,0 +1,54 @@
+{
+  "client_model": "gpt-4o",
+  "direction": "responses_to_chat_response",
+  "input": {
+    "id": "resp_5",
+    "object": "response",
+    "created_at": 1,
+    "model": "m",
+    "status": "incomplete",
+    "incomplete_details": {
+      "reason": "max_output_tokens"
+    },
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "trunc"
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "total_tokens": 15
+    }
+  },
+  "name": "r2c_incomplete_length",
+  "output": {
+    "id": "resp_5",
+    "object": "chat.completion",
+    "created": 1792463212,
+    "model": "gpt-4o",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "trunc"
+        },
+        "finish_reason": "length"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 10,
+      "completion_tokens": 5,
+      "total_tokens": 15
+    }
+  }
+}

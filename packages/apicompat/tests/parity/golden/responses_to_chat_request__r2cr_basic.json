@@ -1,0 +1,35 @@
+{
+  "direction": "responses_to_chat_request",
+  "input": {
+    "model": "gpt-4o",
+    "instructions": "Be brief.",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Hello"
+          }
+        ]
+      }
+    ],
+    "max_output_tokens": 500
+  },
+  "name": "r2cr_basic",
+  "output": {
+    "model": "gpt-4o",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Be brief."
+      },
+      {
+        "role": "user",
+        "content": "Hello"
+      }
+    ],
+    "max_completion_tokens": 500
+  }
+}

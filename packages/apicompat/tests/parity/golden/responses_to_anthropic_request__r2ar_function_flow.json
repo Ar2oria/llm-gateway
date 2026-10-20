@@ -1,0 +1,68 @@
+{
+  "direction": "responses_to_anthropic_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_output_tokens": 500,
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Weather?"
+      },
+      {
+        "type": "function_call",
+        "call_id": "call_A",
+        "name": "get_weather",
+        "arguments": "{\"city\":\"Paris\"}"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_A",
+        "output": "18C"
+      },
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Thanks"
+      }
+    ]
+  },
+  "name": "r2ar_function_flow",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather?"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "call_A",
+            "name": "get_weather",
+            "input": {
+              "city": "Paris"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "call_A",
+            "content": "18C"
+          },
+          {
+            "text": "Thanks",
+            "type": "text"
+          }
+        ]
+      }
+    ]
+  }
+}

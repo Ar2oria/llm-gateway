@@ -1,0 +1,73 @@
+{
+  "direction": "responses_to_chat_stream",
+  "finalize": true,
+  "inputs": [
+    {
+      "type": "response.created",
+      "sequence_number": 0,
+      "response": {
+        "id": "resp_1",
+        "object": "response",
+        "created_at": 1,
+        "model": "m",
+        "status": "in_progress",
+        "output": []
+      }
+    },
+    {
+      "type": "response.output_text.delta",
+      "sequence_number": 1,
+      "output_index": 0,
+      "content_index": 0,
+      "delta": "partial"
+    }
+  ],
+  "name": "r2cs_truncated_finalize",
+  "output": [
+    {
+      "id": "resp_1",
+      "object": "chat.completion.chunk",
+      "created": 1792463212,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant"
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "resp_1",
+      "object": "chat.completion.chunk",
+      "created": 1792463212,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "content": "partial"
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "resp_1",
+      "object": "chat.completion.chunk",
+      "created": 1792463212,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "content": ""
+          },
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  ]
+}

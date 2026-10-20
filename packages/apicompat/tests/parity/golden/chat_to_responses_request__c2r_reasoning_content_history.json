@@ -1,0 +1,46 @@
+{
+  "direction": "chat_to_responses_request",
+  "input": {
+    "model": "gpt-4o",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": "go"
+      },
+      {
+        "role": "assistant",
+        "content": "answer",
+        "reasoning_content": "thought process"
+      }
+    ],
+    "stream": true
+  },
+  "name": "c2r_reasoning_content_history",
+  "output": {
+    "model": "gpt-4o",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "go"
+      },
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "\u003cthinking\u003ethought process\u003c/thinking\u003e\nanswer"
+          }
+        ]
+      }
+    ],
+    "max_output_tokens": 500,
+    "stream": true,
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false
+  }
+}

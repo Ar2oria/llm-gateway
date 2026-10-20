@@ -1,0 +1,53 @@
+{
+  "client_model": "gpt-5",
+  "direction": "responses_to_anthropic_response",
+  "input": {
+    "id": "resp_6",
+    "object": "response",
+    "created_at": 1,
+    "model": "gpt-5",
+    "status": "incomplete",
+    "incomplete_details": {
+      "reason": "max_output_tokens"
+    },
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "status": "incomplete",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "trunc"
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "total_tokens": 15
+    }
+  },
+  "name": "r2a_incomplete",
+  "output": {
+    "id": "resp_6",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "text": "trunc",
+        "type": "text"
+      }
+    ],
+    "model": "gpt-5",
+    "stop_reason": "max_tokens",
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0
+    }
+  }
+}

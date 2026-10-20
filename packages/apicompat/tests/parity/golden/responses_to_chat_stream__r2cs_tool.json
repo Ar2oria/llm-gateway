@@ -1,0 +1,166 @@
+{
+  "direction": "responses_to_chat_stream",
+  "inputs": [
+    {
+      "type": "response.created",
+      "sequence_number": 0,
+      "response": {
+        "id": "resp_1",
+        "object": "response",
+        "created_at": 1,
+        "model": "m",
+        "status": "in_progress",
+        "output": []
+      }
+    },
+    {
+      "type": "response.output_item.added",
+      "sequence_number": 1,
+      "output_index": 0,
+      "item": {
+        "type": "function_call",
+        "id": "fc_1",
+        "call_id": "call_A",
+        "name": "get_weather",
+        "arguments": ""
+      }
+    },
+    {
+      "type": "response.function_call_arguments.delta",
+      "sequence_number": 2,
+      "output_index": 0,
+      "delta": "{\"ci"
+    },
+    {
+      "type": "response.function_call_arguments.delta",
+      "sequence_number": 3,
+      "output_index": 0,
+      "delta": "ty\":\"Paris\"}"
+    },
+    {
+      "type": "response.function_call_arguments.done",
+      "sequence_number": 4,
+      "output_index": 0,
+      "arguments": "{\"city\":\"Paris\"}"
+    },
+    {
+      "type": "response.completed",
+      "sequence_number": 5,
+      "response": {
+        "id": "resp_1",
+        "object": "response",
+        "created_at": 1,
+        "model": "m",
+        "status": "completed",
+        "output": [],
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 5,
+          "total_tokens": 15
+        }
+      }
+    }
+  ],
+  "name": "r2cs_tool",
+  "output": [
+    {
+      "id": "resp_1",
+      "object": "chat.completion.chunk",
+      "created": 1792463212,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant"
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "resp_1",
+      "object": "chat.completion.chunk",
+      "created": 1792463212,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 0,
+                "id": "call_A",
+                "type": "function",
+                "function": {
+                  "name": "get_weather",
+                  "arguments": ""
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "resp_1",
+      "object": "chat.completion.chunk",
+      "created": 1792463212,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 0,
+                "function": {
+                  "arguments": "{\"ci"
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "resp_1",
+      "object": "chat.completion.chunk",
+      "created": 1792463212,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 0,
+                "function": {
+                  "arguments": "ty\":\"Paris\"}"
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "resp_1",
+      "object": "chat.completion.chunk",
+      "created": 1792463212,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "content": ""
+          },
+          "finish_reason": "tool_calls"
+        }
+      ]
+    }
+  ]
+}

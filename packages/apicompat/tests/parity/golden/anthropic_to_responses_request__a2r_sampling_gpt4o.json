@@ -1,0 +1,46 @@
+{
+  "direction": "anthropic_to_responses_request",
+  "input": {
+    "model": "gpt-4o",
+    "max_tokens": 500,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello"
+      }
+    ]
+  },
+  "name": "a2r_sampling_gpt4o",
+  "output": {
+    "model": "gpt-4o",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Hello"
+          }
+        ]
+      }
+    ],
+    "max_output_tokens": 500,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false,
+    "parallel_tool_calls": true,
+    "reasoning": {
+      "effort": "medium",
+      "summary": "auto"
+    },
+    "text": {
+      "verbosity": "medium"
+    }
+  }
+}

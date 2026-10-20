@@ -1,0 +1,162 @@
+{
+  "direction": "chat_to_anthropic_stream",
+  "inputs": [
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant",
+            "content": ""
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant",
+            "tool_calls": [
+              {
+                "index": 0,
+                "id": "call_A",
+                "type": "function",
+                "function": {
+                  "name": "get_weather",
+                  "arguments": ""
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 0,
+                "function": {
+                  "arguments": "{\"ci"
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 0,
+                "function": {
+                  "arguments": "ty\":\"Paris\"}"
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {},
+          "finish_reason": "tool_calls"
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [],
+      "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15
+      }
+    }
+  ],
+  "name": "c2as_tool",
+  "output": [
+    {
+      "type": "message_start",
+      "message": {
+        "id": "chatcmpl-1",
+        "type": "message",
+        "role": "assistant",
+        "content": [],
+        "model": "m",
+        "stop_reason": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0
+        }
+      }
+    },
+    {
+      "type": "content_block_start",
+      "index": 0,
+      "content_block": {
+        "type": "tool_use",
+        "id": "call_A",
+        "name": "get_weather",
+        "input": {}
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 0,
+      "delta": {
+        "type": "input_json_delta",
+        "partial_json": "{\"ci"
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 0,
+      "delta": {
+        "type": "input_json_delta",
+        "partial_json": "ty\":\"Paris\"}"
+      }
+    }
+  ]
+}

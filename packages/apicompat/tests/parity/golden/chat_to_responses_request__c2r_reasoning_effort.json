@@ -1,0 +1,36 @@
+{
+  "direction": "chat_to_responses_request",
+  "input": {
+    "model": "gpt-5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello"
+      }
+    ],
+    "max_tokens": 100,
+    "reasoning_effort": "high",
+    "stream": true
+  },
+  "name": "c2r_reasoning_effort",
+  "output": {
+    "model": "gpt-5",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Hello"
+      }
+    ],
+    "max_output_tokens": 128,
+    "stream": true,
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false,
+    "reasoning": {
+      "effort": "high",
+      "summary": "auto"
+    }
+  }
+}

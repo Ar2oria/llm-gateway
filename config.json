@@ -1,0 +1,18 @@
+{
+  "server": {
+    "api_key": "apikey"
+  },
+  "endpoints": [
+    {
+      "base_url": "https://api.anthropic.com",
+      "custom_headers": {
+        "x-api-key": "sk-ant-your-key"
+      },
+      "models": [
+        {
+          "name": "claude-sonnet-5-5"
+        }
+      ]
+    }
+  ]
+}

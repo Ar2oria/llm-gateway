@@ -1,0 +1,53 @@
+{
+  "direction": "anthropic_to_responses_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "tools": [
+      {
+        "type": "web_search_20250305",
+        "name": "web_search"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Search the web"
+      }
+    ]
+  },
+  "name": "a2r_web_search_tool",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Search the web"
+          }
+        ]
+      }
+    ],
+    "max_output_tokens": 500,
+    "tools": [
+      {
+        "type": "web_search"
+      }
+    ],
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false,
+    "parallel_tool_calls": true,
+    "reasoning": {
+      "effort": "medium",
+      "summary": "auto"
+    },
+    "text": {
+      "verbosity": "medium"
+    }
+  }
+}

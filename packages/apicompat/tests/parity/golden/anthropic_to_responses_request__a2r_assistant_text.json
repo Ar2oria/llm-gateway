@@ -1,0 +1,70 @@
+{
+  "direction": "anthropic_to_responses_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 100,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure."
+      },
+      {
+        "role": "user",
+        "content": "Thanks"
+      }
+    ]
+  },
+  "name": "a2r_assistant_text",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Hi"
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "Sure."
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Thanks"
+          }
+        ]
+      }
+    ],
+    "max_output_tokens": 128,
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false,
+    "parallel_tool_calls": true,
+    "reasoning": {
+      "effort": "medium",
+      "summary": "auto"
+    },
+    "text": {
+      "verbosity": "medium"
+    }
+  }
+}

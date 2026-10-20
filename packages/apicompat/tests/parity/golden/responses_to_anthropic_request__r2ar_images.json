@@ -1,0 +1,47 @@
+{
+  "direction": "responses_to_anthropic_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_output_tokens": 500,
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_image",
+            "image_url": "data:image/png;base64,aGk="
+          },
+          {
+            "type": "input_text",
+            "text": "what is this"
+          }
+        ]
+      }
+    ]
+  },
+  "name": "r2ar_images",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "image",
+            "source": {
+              "type": "base64",
+              "media_type": "image/png",
+              "data": "aGk="
+            }
+          },
+          {
+            "text": "what is this",
+            "type": "text"
+          }
+        ]
+      }
+    ]
+  }
+}

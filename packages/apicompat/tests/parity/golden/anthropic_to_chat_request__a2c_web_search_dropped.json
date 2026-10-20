@@ -1,0 +1,54 @@
+{
+  "direction": "anthropic_to_chat_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "tools": [
+      {
+        "type": "web_search_20250305",
+        "name": "web_search"
+      },
+      {
+        "name": "get_weather",
+        "description": "Get weather",
+        "input_schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      }
+    ]
+  },
+  "name": "a2c_web_search_dropped",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      }
+    ],
+    "max_completion_tokens": 500,
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "Get weather",
+          "parameters": {
+            "type": "object",
+            "properties": {}
+          },
+          "strict": false
+        }
+      }
+    ],
+    "parallel_tool_calls": true,
+    "reasoning_effort": "medium"
+  }
+}

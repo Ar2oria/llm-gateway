@@ -1,0 +1,2195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>接入点管理 - llm-gateway</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --border: #e0e2e6; --text: #24292f;
+    --muted: #6b7280; --accent: #2563eb; --danger: #dc2626; --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 24px; background: var(--card); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 18px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 12px; flex: 1; }
+  button { cursor: pointer; border: 1px solid var(--border); background: var(--card); border-radius: var(--radius); padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:hover { opacity: .9; color: #fff; }
+  button.danger { color: var(--danger); }
+  button.danger:hover { border-color: var(--danger); }
+  .badge { background: #eef2ff; color: var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+  .badge.news { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+  .pick-new-col { flex: 0 0 34px; display: flex; justify-content: center; align-self: center; }
+  .pick-new { background: #fef2f2; color: var(--danger); border-radius: 999px; padding: 1px 8px; font-size: 11px; white-space: nowrap; }
+  #endpoint-list { max-width: 960px; margin: 24px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 12px; }
+  .tabs { display: flex; gap: 8px; }
+  .tab { padding: 6px 18px; border-radius: 999px; }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #list-content { display: flex; flex-direction: column; gap: 12px; }
+  #list-content table tbody tr:nth-child(even) { background: #fafbfc; }
+  #list-content table tbody tr.selected { background: #e0e7ff; box-shadow: inset 3px 0 0 var(--accent); }
+  .endpoint { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+  .endpoint-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; }
+  .endpoint-head .chevron { color: var(--muted); width: 14px; }
+  .endpoint-head .url { font-weight: 600; flex: 1; word-break: break-all; }
+  .actions { display: flex; gap: 8px; }
+  .endpoint-body { border-top: 1px solid var(--border); padding: 12px 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+  td.code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .empty { color: var(--muted); padding: 8px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .modal-overlay.show { display: flex; }
+  .modal { position: relative; background: var(--card); border-radius: var(--radius); width: 520px; max-width: 92vw; max-height: 88vh; overflow: auto; padding: 20px; }
+  .modal.wide { width: 720px; }
+  .modal h2 { margin: 0 0 16px; font-size: 16px; padding-right: 28px; }
+  .modal-close { position: absolute; top: 10px; right: 12px; z-index: 2; border: none; background: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 4px 6px; border-radius: 6px; }
+  .modal-close:hover { color: var(--text); background: var(--bg); }
+  .modal p { margin: 0; }
+  .modal label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+  .modal input[type=text], .modal textarea, .modal select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--card); color: var(--text); }
+  .modal textarea { min-height: 72px; resize: vertical; }
+  .modal input[disabled] { background: var(--bg); color: var(--muted); }
+  .kv-row { display: flex; gap: 8px; margin-bottom: 6px; }
+  .kv-row input[type=text] { flex: 1; }
+  .kv-row button { flex: 0 0 auto; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; align-items: center; }
+  .modal-actions.protocol-picker { flex-direction: column; align-items: stretch; }
+  .protocol-btn { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 14px; text-align: left; white-space: normal; }
+  .protocol-btn small { color: var(--muted); font-size: 12px; }
+  #toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: #1f2937; color: #fff; padding: 10px 16px; border-radius: var(--radius); font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+  .toast.error { background: var(--danger); }
+  .toast.success { background: #16a34a; }
+  .stats-section { margin-bottom: 20px; }
+  .stats-section h2 { font-size: 15px; margin: 4px 0 12px; }
+  .section-head { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
+  .section-head h2 { margin: 0; }
+  .section-head .mini-refresh { font-size: 12px; padding: 2px 10px; border-radius: 999px; }
+  .stats-grid { display: grid; grid-template-columns: 320px 1fr; gap: 12px; margin-bottom: 12px; }
+  .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; min-height: 260px; }
+  .chart-card.fill { display: flex; flex-direction: column; }
+  .chart-canvas-wrap { position: relative; flex: 1 1 auto; min-height: 0; }
+  .card-row { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 12px; cursor: pointer; }
+  .card-row:hover { border-color: var(--accent); }
+  .card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .card-head .url { font-weight: 600; flex: 1; word-break: break-all; min-width: 120px; }
+  .card-head select, .card-head input[type=date] { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+  .card-sums { display: flex; gap: 24px; margin: 10px 0 6px; font-size: 13px; }
+  .card-sums b { color: var(--accent); }
+  .requests-filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .requests-filters select, .requests-filters input { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .requests-filters select { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .req-time-group { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .requests-totals-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .requests-totals-row .req-query-btn { margin-left: auto; margin-right: 24px; }
+  #list-content th.sortable { cursor: pointer; user-select: none; }
+  #list-content th.sortable:hover { color: var(--accent); }
+  .requests-pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .pick-toolbar { display: flex; align-items: center; gap: 12px; position: sticky; top: 0; background: var(--card); padding: 6px 6px 8px; border-bottom: 1px solid var(--border); z-index: 1; font-size: 13px; color: var(--muted); }
+  .pick-toolbar.has-news { padding-left: 48px; }
+  .pick-head { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); padding: 4px 6px 2px; }
+  .pick-head span.name { flex: 1.7; }
+  .pick-head span.up { flex: 1; }
+  .pick-head span.proto { flex: 0 0 130px; }
+  .pick-ck { width: 16px; height: 16px; flex: 0 0 auto; }
+  .pick-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+  .pick-row { display: flex; gap: 8px; align-items: center; padding: 3px 6px; border-radius: 6px; }
+  .pick-row.dup { background: #fef2f2; }
+  .pick-row.dup .pick-name { color: var(--danger); border-color: #fecaca; }
+  .pick-row.free { background: #f0fdf4; }
+  .pick-row.free .pick-name { color: #16a34a; border-color: #bbf7d0; }
+  .pick-row input[type=text] { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  .pick-row input.pick-name { flex: 1.7; }
+  .pick-row input.pick-upstream { flex: 1; }
+  .pick-row select.pick-proto { flex: 0 0 130px; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--card); color: var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <h1>接入点管理</h1>
+  <span class="sub" id="subtitle">修改即时生效 · 变更自动写回配置文件</span>
+  <button id="refresh-btn">刷新</button>
+  <button id="add-endpoint-btn" class="primary">+ 添加接入点</button>
+  <button id="extra-body-btn">附加请求字段</button>
+</header>
+
+<main id="endpoint-list">
+  <div class="tabs">
+    <button id="tab-endpoints" class="tab active">接入点</button>
+    <button id="tab-models" class="tab">模型</button>
+    <button id="tab-stats" class="tab">统计</button>
+  </div>
+  <div id="list-content"></div>
+  <div id="stats-view" style="display:none">
+    <div class="stats-section">
+      <div class="section-head">
+        <h2>今日用量概览</h2>
+        <button class="mini-refresh" id="refresh-overview-btn">刷新</button>
+      </div>
+      <div class="stats-grid">
+        <div class="chart-card">
+          <canvas id="chart-pie"></canvas>
+          <div class="empty" id="empty-pie" style="display:none">今天暂无请求数据</div>
+        </div>
+        <div class="chart-card">
+          <div id="drilldown-bar" style="display:none; margin-bottom:8px;">
+            <button id="back-all-models">← 返回全部模型</button>
+          </div>
+          <canvas id="chart-model-bars"></canvas>
+          <div class="empty" id="empty-model-bars" style="display:none">今天暂无请求数据</div>
+        </div>
+        <div class="chart-card">
+          <canvas id="chart-cost-pie"></canvas>
+          <div class="empty" id="empty-cost-pie" style="display:none">今天暂无请求数据</div>
+        </div>
+        <div class="chart-card">
+          <canvas id="chart-cost-bars"></canvas>
+          <div class="empty" id="empty-cost-bars" style="display:none">今天暂无请求数据</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats-section">
+      <div class="section-head">
+        <h2>模型明细</h2>
+        <button class="mini-refresh" id="tps-scale-btn" title="在对数/线性刻度间切换">刻度：线性</button>
+        <button class="mini-refresh" id="refresh-model-detail-btn">刷新</button>
+      </div>
+      <div class="stats-grid">
+        <div class="chart-card fill">
+          <div class="chart-canvas-wrap">
+            <canvas id="chart-model-tps"></canvas>
+          </div>
+          <div class="empty" id="empty-model-tps" style="display:none">暂无 TPS 采样（每模型至少 3 次请求）</div>
+        </div>
+        <div class="chart-card">
+          <div class="card-head" style="margin-bottom:8px;">
+            <label style="font-size:13px;color:var(--muted)">选择模型：</label>
+            <select id="model-detail-select" style="flex:1;max-width:300px">
+              <option value="">— 请选择 —</option>
+            </select>
+            <span id="model-detail-hitrate" style="font-size:13px;color:var(--muted);margin-left:12px;display:none"></span>
+          </div>
+          <canvas id="chart-model-detail"></canvas>
+          <div class="empty" id="empty-model-detail" style="display:none">请选择一个模型</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats-section">
+      <h2>接入点统计</h2>
+      <div id="card-list"></div>
+    </div>
+  </div>
+  <div id="requests-view" style="display:none">
+    <div class="requests-filters" id="requests-filters"></div>
+    <div class="requests-totals-row"></div>
+    <div id="requests-table-wrap"></div>
+    <div class="requests-pager" id="requests-pager"></div>
+  </div>
+</main>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<div id="toast"></div>
+
+<script src="/static/chart.umd.min.js"></script>
+<script>
+"use strict";
+
+const overlay = document.getElementById("modal-overlay");
+// 点击遮罩层（弹窗外侧）关闭弹窗
+overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
+const listEl = document.getElementById("endpoint-list");
+let endpoints = [];
+let serverInfo = null;      // /admin/api/server 响应（api_key 哨兵，生成 curl 用）
+let expanded = new Set();
+let currentTab = "endpoints";
+let modelsSort = { key: "default", dir: "asc" };   // 模型页排序：default=接入点列表顺序
+let statsData = null;        // /admin/api/stats/day 响应
+let selectedModel = null;    // 下钻模型名，null = 全部
+let bucketed = [];           // statsData.minutes 自适应合并后的桶
+let bucketWidthMin = 1;      // 当前桶宽（分钟），1 = 原始逐分钟
+let statsCharts = [];        // 活着的 Chart 实例
+let cardStates = [];         // [{baseUrl, date, models, modelsAll, data, chart}]
+let requestsState = { baseUrl: "", model: "", from: "", to: "", limit: 50, offset: 0, total: 0 };
+
+async function api(method, url, body) {
+  const opts = { method, headers: {} };
+  if (body !== undefined) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const resp = await fetch(url, opts);
+  if (resp.status === 204) return null;
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const msg = data.error && data.error.message
+      ? data.error.message
+      : (resp.status === 422 ? "请求格式错误" : "请求失败 (" + resp.status + ")");
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function toast(message, kind) {
+  const el = document.createElement("div");
+  el.className = "toast" + (kind ? " " + kind : "");
+  el.textContent = message;
+  document.getElementById("toast").appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+async function loadEndpoints() {
+  try {
+    endpoints = await api("GET", "/admin/api/endpoints");
+    render();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  history.replaceState(null, "", "#" + tab);
+  render();
+}
+
+function render() {
+  document.getElementById("tab-endpoints").classList.toggle("active", currentTab === "endpoints");
+  document.getElementById("tab-models").classList.toggle("active", currentTab === "models");
+  document.getElementById("tab-stats").classList.toggle("active", currentTab === "stats");
+  const content = document.getElementById("list-content");
+  content.style.display = (currentTab === "endpoints" || currentTab === "models") ? "" : "none";
+  document.getElementById("stats-view").style.display = currentTab === "stats" ? "" : "none";
+  document.getElementById("requests-view").style.display = currentTab === "requests" ? "" : "none";
+  if (currentTab === "endpoints") {
+    content.innerHTML = "";
+    for (const ep of endpoints) content.appendChild(renderEndpoint(ep));
+  } else if (currentTab === "models") {
+    content.innerHTML = "";
+    renderModels(content);
+  } else if (currentTab === "stats") {
+    loadStatsTop();
+    loadCards();
+  } else if (currentTab === "requests") {
+    renderRequestsFilters();
+    loadRequests();
+  }
+}
+
+function renderModels(content) {
+  const rows = [];
+  for (const ep of endpoints) {
+    for (const m of ep.models) rows.push({ model: m, baseUrl: ep.base_url });
+  }
+  if (rows.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "暂无模型";
+    content.appendChild(empty);
+    return;
+  }
+  const sorted = sortModelRows(rows, modelsSort.key, modelsSort.dir);
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  thead.appendChild(buildModelsHeader());
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const { model, baseUrl } of sorted) {
+    const tr = document.createElement("tr");
+    const nameTd = document.createElement("td");
+    nameTd.className = "code";
+    nameTd.textContent = model.name;
+    const epTd = document.createElement("td");
+    epTd.className = "code";
+    epTd.textContent = baseUrl;
+    const upTd = document.createElement("td");
+    upTd.className = "code";
+    upTd.textContent = model.upstream_model || "—";
+    const sysTd = document.createElement("td");
+    sysTd.className = "code";
+    sysTd.textContent = model.system_prompt || "—";
+    const protoTd = document.createElement("td");
+    protoTd.className = "code";
+    protoTd.textContent = model.protocol || "—";
+    const opsTd = document.createElement("td");
+    const ops = document.createElement("span");
+    ops.className = "actions";
+    // 编辑入口保留在「接入点」卡片展开视图；模型页提供复制curl
+    ops.appendChild(actionBtn("复制curl", () => copyModelCurl(model)));
+    ops.appendChild(actionBtn("删除", () => {
+      confirmDialog("确定删除该模型？").then(ok => { if (ok) deleteModel(baseUrl, model.name); });
+    }, "danger"));
+    opsTd.appendChild(ops);
+    tr.append(nameTd, epTd, upTd, sysTd, protoTd, opsTd);
+    tr.addEventListener("click", (e) => {
+      if (e.target.closest("button")) return;
+      const wasSelected = tr.classList.contains("selected");
+      for (const row of tbody.rows) row.classList.remove("selected");
+      if (!wasSelected) tr.classList.add("selected");
+    });
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  content.appendChild(table);
+}
+
+// 模型页表头：点击列排序（无序 → 升序 → 降序 → 无序），当前列显示箭头
+function buildModelsHeader() {
+  const tr = document.createElement("tr");
+  const columns = [
+    ["name", "模型名称"],
+    ["endpoint", "接入点"],
+    ["upstream_model", "上游模型名"],
+    ["system_prompt", "系统提示词"],
+    ["protocol", "协议"],
+    [null, ""],   // 操作列不可排序
+  ];
+  for (const [key, label] of columns) {
+    const th = document.createElement("th");
+    if (!key) { tr.appendChild(th); continue; }
+    th.classList.add("sortable");
+    th.title = "点击排序";
+    const arrow = modelsSort.key === key ? (modelsSort.dir === "asc" ? " ↑" : " ↓") : "";
+    th.textContent = label + arrow;
+    th.addEventListener("click", () => {
+      modelsSort = nextSortState(modelsSort, key);
+      render();
+    });
+    tr.appendChild(th);
+  }
+  return tr;
+}
+
+function renderEndpoint(ep) {
+  const card = document.createElement("div");
+  card.className = "endpoint";
+
+  const head = document.createElement("div");
+  head.className = "endpoint-head";
+
+  const chevron = document.createElement("span");
+  chevron.className = "chevron";
+  chevron.textContent = expanded.has(ep.base_url) ? "▾" : "▸";
+  head.appendChild(chevron);
+
+  const url = document.createElement("span");
+  url.className = "url";
+  url.textContent = ep.base_url;
+  head.appendChild(url);
+
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  badge.textContent = ep.models.length + " 个模型";
+  head.appendChild(badge);
+
+  const news = newsBadgeText(ep.models_news);
+  if (news) {
+    const nb = document.createElement("span");
+    nb.className = "badge news";
+    nb.textContent = news;
+    head.appendChild(nb);
+  }
+
+  const actions = document.createElement("span");
+  actions.className = "actions";
+  actions.appendChild(actionBtn("获取模型", () => openFetchModelsModal(ep)));
+  actions.appendChild(actionBtn("编辑", () => openEndpointModal(ep)));
+  actions.appendChild(actionBtn("添加模型", () => openModelModal(ep.base_url, null)));
+  actions.appendChild(actionBtn("删除", () => {
+    confirmDialog("确定删除该接入点及其全部模型？").then(ok => { if (ok) deleteEndpoint(ep.base_url); });
+  }, "danger"));
+  head.appendChild(actions);
+  head.addEventListener("click", (e) => {
+    if (e.target.closest(".actions")) return;
+    if (expanded.has(ep.base_url)) expanded.delete(ep.base_url);
+    else expanded.add(ep.base_url);
+    render();
+  });
+
+  card.appendChild(head);
+
+  if (expanded.has(ep.base_url)) {
+    const body = document.createElement("div");
+    body.className = "endpoint-body";
+    if (ep.models.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "暂无模型";
+      body.appendChild(empty);
+    } else {
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      thead.innerHTML = "<tr><th>模型名称</th><th>上游模型名</th><th>系统提示词</th><th>协议</th><th></th></tr>";
+      table.appendChild(thead);
+      const tbody = document.createElement("tbody");
+      for (const m of ep.models) {
+        const tr = document.createElement("tr");
+        const nameTd = document.createElement("td");
+        nameTd.className = "code";
+        nameTd.textContent = m.name;
+        const upTd = document.createElement("td");
+        upTd.className = "code";
+        upTd.textContent = m.upstream_model || "—";
+        const sysTd = document.createElement("td");
+        sysTd.className = "code";
+        sysTd.textContent = m.system_prompt || "—";
+        const protoTd = document.createElement("td");
+        protoTd.className = "code";
+        protoTd.textContent = m.protocol || "—";
+        const opsTd = document.createElement("td");
+        const ops = document.createElement("span");
+        ops.className = "actions";
+        ops.appendChild(actionBtn("编辑", () => openModelModal(ep.base_url, m)));
+        ops.appendChild(actionBtn("删除", () => {
+          confirmDialog("确定删除该模型？").then(ok => { if (ok) deleteModel(ep.base_url, m.name); });
+        }, "danger"));
+        opsTd.appendChild(ops);
+        tr.append(nameTd, upTd, sysTd, protoTd, opsTd);
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      body.appendChild(table);
+    }
+    card.appendChild(body);
+  }
+  return card;
+}
+
+function actionBtn(label, onClick, cls) {
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  if (cls) btn.className = cls;
+  btn.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
+  return btn;
+}
+
+function showModal(html, opts) {
+  const modal = document.getElementById("modal-content");
+  modal.classList.toggle("wide", !!(opts && opts.wide));
+  modal.innerHTML = html;
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "modal-close";
+  closeBtn.title = "关闭";
+  closeBtn.textContent = "✕";
+  closeBtn.addEventListener("click", closeModal);
+  modal.appendChild(closeBtn);
+  overlay.classList.add("show");
+}
+
+function closeModal() {
+  overlay.classList.remove("show");
+  document.getElementById("modal-content").classList.remove("wide");
+}
+
+function kvRow(key, value) {
+  const row = document.createElement("div");
+  row.className = "kv-row";
+  const k = document.createElement("input");
+  k.type = "text"; k.placeholder = "键"; k.value = key || "";
+  const v = document.createElement("input");
+  v.type = "text"; v.placeholder = "值"; v.value = value || "";
+  const del = document.createElement("button");
+  del.textContent = "删除";
+  del.addEventListener("click", () => row.remove());
+  row.append(k, v, del);
+  return row;
+}
+
+// Authorization 专用输入框的 Bearer 前缀（大小写不敏感）
+const BEARER_PREFIX = /^bearer\s+/i;
+
+function headerValue(headers, name) {
+  // 按头名取值（大小写不敏感——配置文件里的键可能是任意大小写）
+  const found = Object.entries(headers || {}).find(
+    ([k]) => k && k.toLowerCase() === name.toLowerCase());
+  return found ? found[1] : "";
+}
+
+function collectHeaders(kvList, uaInput, authInput) {
+  const headers = {};
+  const ua = uaInput.value.trim();
+  const auth = authInput.value.trim();
+  if (ua) headers["User-Agent"] = ua;
+  // 已带 Bearer 前缀的输入原样保存，避免出现 "Bearer Bearer ..."
+  if (auth) headers["Authorization"] = BEARER_PREFIX.test(auth) ? auth : "Bearer " + auth;
+  for (const row of kvList.querySelectorAll(".kv-row")) {
+    const key = row.children[0].value.trim();
+    const value = row.children[1].value;
+    if (!key) continue;
+    const lk = key.toLowerCase();
+    // 专用框已处理 UA / Authorization 时跳过通用行里的同名头，避免双写
+    if ((lk === "user-agent" && ua) || (lk === "authorization" && auth)) continue;
+    headers[key] = value;
+  }
+  return headers;
+}
+
+function openEndpointModal(ep) {
+  const isEdit = !!ep;
+  const headers = ep ? ep.custom_headers : {};
+  const ua = headerValue(headers, "User-Agent");
+  const authRaw = headerValue(headers, "Authorization");
+  // 专用框只接管 Bearer 形式的 Authorization（展示时去掉前缀只显示 key）；
+  // 其他形式（如 Basic）保留在通用键值行，保存时不会被加前缀。
+  const authIsBearer = BEARER_PREFIX.test(authRaw);
+  const auth = authIsBearer ? authRaw.replace(BEARER_PREFIX, "") : "";
+  const others = Object.entries(headers).filter(([k]) => {
+    const lk = (k || "").toLowerCase();
+    if (lk === "user-agent") return false;
+    if (lk === "authorization" && authIsBearer) return false;
+    return true;
+  });
+
+  showModal(
+    '<h2>' + (isEdit ? "编辑接入点" : "添加接入点") + '</h2>' +
+    '<label>Base URL</label>' +
+    '<input type="text" id="ep-base-url" value="' + escapeAttr(isEdit ? ep.base_url : "") + '"' + (isEdit ? " disabled" : "") + '>' +
+    '<label>User-Agent</label>' +
+    '<input type="text" id="ep-ua" value="' + escapeAttr(ua) + '" placeholder="可选">' +
+    '<label>Authorization</label>' +
+    '<input type="text" id="ep-auth" value="' + escapeAttr(auth) + '" placeholder="可选 · 填 API Key，保存时自动加 Bearer 前缀">' +
+    '<label>自定义请求头</label>' +
+    '<div id="kv-list"></div>' +
+    '<div class="modal-actions">' +
+    '  <button id="kv-add">+ 添加一行</button>' +
+    '  <span style="flex:1"></span>' +
+    '  <button id="modal-cancel">取消</button>' +
+    '  <button id="modal-save" class="primary">保存</button>' +
+    '</div>'
+  );
+
+  const kvList = document.getElementById("kv-list");
+  for (const [k, v] of others) kvList.appendChild(kvRow(k, v));
+  document.getElementById("kv-add").addEventListener("click", () => kvList.appendChild(kvRow()));
+  document.getElementById("modal-cancel").addEventListener("click", closeModal);
+  document.getElementById("modal-save").addEventListener("click", async () => {
+    const headers = collectHeaders(kvList, document.getElementById("ep-ua"),
+                                  document.getElementById("ep-auth"));
+    try {
+      if (isEdit) {
+        await api("PUT", "/admin/api/endpoints?base_url=" + encodeURIComponent(ep.base_url),
+                  { custom_headers: headers });
+        toast("已保存", "success");
+      } else {
+        const baseUrl = document.getElementById("ep-base-url").value.trim();
+        if (!baseUrl) { toast("Base URL 不能为空", "error"); return; }
+        await api("POST", "/admin/api/endpoints", { base_url: baseUrl, custom_headers: headers });
+        toast("已添加接入点", "success");
+      }
+      closeModal();
+      await loadEndpoints();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  });
+}
+
+function openModelModal(baseUrl, model) {
+  const isEdit = !!model;
+  const pricing = isEdit ? (model.pricing || {}) : {};
+  const curProtocol = isEdit ? (model.protocol || "") : "";
+  const protocolOptions = [
+    { value: "", label: "不限制（直通）" },
+    { value: "anthropic_messages", label: "anthropic" },
+    { value: "openai_chat", label: "openai" },
+    { value: "openai_responses", label: "openai-responses" },
+  ].map(p => '<option value="' + p.value + '"' + (p.value === curProtocol ? " selected" : "") + '>' +
+             p.label + '</option>')
+    .join("");
+  showModal(
+    '<h2>' + (isEdit ? "编辑模型" : "添加模型") + '</h2>' +
+    '<label>模型名称</label>' +
+    '<input type="text" id="m-name" value="' + escapeAttr(isEdit ? model.name : "") + '"' + (isEdit ? " disabled" : "") + '>' +
+    '<label>上游模型名</label>' +
+    '<input type="text" id="m-upstream" value="' + escapeAttr(isEdit ? (model.upstream_model || "") : "") + '" placeholder="可选">' +
+    '<label>协议</label>' +
+    '<select id="m-protocol">' + protocolOptions + '</select>' +
+    '<label>系统提示词</label>' +
+    '<textarea id="m-system">' + escapeHtml(isEdit ? (model.system_prompt || "") : "") + '</textarea>' +
+    '<label>输入价格（$/1M tokens，可留空）</label>' +
+    '<input type="text" id="m-price-input" placeholder="如 3" value="' + escapeAttr(pricing.input ?? "") + '">' +
+    '<label>缓存读价格</label>' +
+    '<input type="text" id="m-price-read" placeholder="输入×0.1" value="' + escapeAttr(pricing.cache_read ?? "") + '">' +
+    '<label>缓存写价格</label>' +
+    '<input type="text" id="m-price-write" placeholder="输入×1.25" value="' + escapeAttr(pricing.cache_write ?? "") + '">' +
+    '<label>输出价格</label>' +
+    '<input type="text" id="m-price-output" placeholder="输入×5" value="' + escapeAttr(pricing.output ?? "") + '">' +
+    '<div class="modal-actions">' +
+    '  <button id="modal-cancel">取消</button>' +
+    '  <button id="modal-save" class="primary">保存</button>' +
+    '</div>'
+  );
+
+  document.getElementById("modal-cancel").addEventListener("click", closeModal);
+  document.getElementById("modal-save").addEventListener("click", async () => {
+    const pricing = {};
+    for (const [key, el] of [["input", "m-price-input"], ["cache_read", "m-price-read"],
+                             ["cache_write", "m-price-write"], ["output", "m-price-output"]]) {
+      const v = document.getElementById(el).value.trim();
+      if (v !== "") pricing[key] = parseFloat(v);
+    }
+    const payload = {
+      upstream_model: document.getElementById("m-upstream").value.trim() || null,
+      protocol: document.getElementById("m-protocol").value || null,
+      system_prompt: document.getElementById("m-system").value.trim() || null,
+      pricing: Object.keys(pricing).length ? pricing : null,
+    };
+    try {
+      if (isEdit) {
+        await api("PUT", "/admin/api/endpoints/models?base_url=" + encodeURIComponent(baseUrl)
+                  + "&name=" + encodeURIComponent(model.name), payload);
+        toast("已保存", "success");
+      } else {
+        const name = document.getElementById("m-name").value.trim();
+        if (!name) { toast("模型名称不能为空", "error"); return; }
+        payload.name = name;
+        await api("POST", "/admin/api/endpoints/models?base_url=" + encodeURIComponent(baseUrl), payload);
+        toast("已添加模型", "success");
+      }
+      closeModal();
+      await loadEndpoints();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  });
+}
+
+// —— 全局附加请求字段（server.extra_body，按协议分 tab，转换时合并进对应协议的上游请求）——
+const EXTRA_BODY_TABS = [
+  { key: "openai_responses", label: "Responses 协议" },
+  { key: "openai_chat", label: "OpenAI Chat 协议" },
+  { key: "anthropic_messages", label: "Anthropic 协议" },
+];
+
+async function openExtraBodyModal() {
+  let current = {};
+  try {
+    const resp = await api("GET", "/admin/api/extra-body");
+    current = resp.extra_body || {};
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  const tabBtns = EXTRA_BODY_TABS.map((t, i) =>
+    '<button class="tab' + (i === 0 ? " active" : "") + '" data-tab="' + t.key + '">' + t.label + '</button>'
+  ).join("");
+  const panels = EXTRA_BODY_TABS.map((t, i) => {
+    const text = current[t.key] && Object.keys(current[t.key]).length ? JSON.stringify(current[t.key]) : "";
+    return '<div class="eb-panel" data-panel="' + t.key + '"' + (i === 0 ? "" : ' style="display:none"') + '>' +
+      '<textarea id="eb-body-' + t.key + '" style="min-height:120px;font-family:ui-monospace,Menlo,monospace;" ' +
+        'placeholder=\'{"store": false, "include": ["reasoning.encrypted_content"]}\'>' +
+        escapeHtml(text) + '</textarea>' +
+      '</div>';
+  }).join("");
+  showModal(
+    '<h2>附加请求字段（全局）</h2>' +
+    '<p style="font-size:12px;color:var(--muted);line-height:1.5;margin:0 0 8px;">' +
+    '按协议分别配置合并进转换后上游请求的额外字段（如 Responses 的 store / include / text）。留空表示该协议不附加。</p>' +
+    '<div class="tabs" style="margin-bottom:8px;">' + tabBtns + '</div>' +
+    panels +
+    '<div class="modal-actions">' +
+    '  <button id="modal-cancel">取消</button>' +
+    '  <button id="modal-save" class="primary">保存</button>' +
+    '</div>'
+  );
+  // tab 切换
+  document.querySelectorAll(".modal .tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".modal .tab").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const key = btn.dataset.tab;
+      document.querySelectorAll(".modal .eb-panel").forEach(p => {
+        p.style.display = p.dataset.panel === key ? "" : "none";
+      });
+    });
+  });
+  document.getElementById("modal-cancel").addEventListener("click", closeModal);
+  document.getElementById("modal-save").addEventListener("click", async () => {
+    const extraBody = {};
+    let any = false;
+    for (const t of EXTRA_BODY_TABS) {
+      const raw = document.getElementById("eb-body-" + t.key).value.trim();
+      if (raw === "") continue;
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
+        toast(t.label + " 的附加字段不是合法 JSON", "error");
+        return;
+      }
+      if (typeof parsed !== "object" || Array.isArray(parsed)) {
+        toast(t.label + " 的附加字段必须是 JSON 对象", "error");
+        return;
+      }
+      extraBody[t.key] = parsed;
+      any = true;
+    }
+    try {
+      await api("PUT", "/admin/api/extra-body", { extra_body: any ? extraBody : null });
+      toast("已保存", "success");
+      closeModal();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  });
+}
+
+// —— 获取模型 ——
+const SECOND_LEVEL_TLDS = new Set([
+  "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn",
+  "com.hk", "com.tw", "com.sg", "co.uk", "org.uk", "co.jp",
+]);
+
+// 从接入点 base_url 提取命名前缀：api.example.com → example（注册域首标签）
+function domainLabel(baseUrl) {
+  let host = "";
+  try {
+    host = new URL(baseUrl).hostname;
+  } catch (e) {
+    host = String(baseUrl).replace(/^\w+:\/\//, "").split("/")[0];
+  }
+  host = (host || "").toLowerCase().replace(/\.$/, "");
+  if (!host || host.includes(":") || /^\d+(\.\d+){3}$/.test(host)) return host || "model";
+  const labels = host.split(".");
+  if (labels.length === 1) return labels[0];
+  const n = labels.length >= 3 && SECOND_LEVEL_TLDS.has(labels.slice(-2).join(".")) ? 3 : 2;
+  return labels[labels.length - n];
+}
+
+function isDuplicateName(name, systemNames, allNames) {
+  return !!name && (systemNames.has(name) || allNames.filter(n => n === name).length > 1);
+}
+
+function isFreeModel(upstreamName) {
+  return /free/i.test(String(upstreamName || ""));
+}
+
+// NEWS-START
+// 「模型上新」徽标与新增模型标记（纯函数，由 tests/models_news_test.mjs 覆盖）
+function newsBadgeText(modelsNews) {
+  const list = Array.isArray(modelsNews) ? modelsNews : [];
+  return list.length ? "模型上新 " + list.length : null;
+}
+function isNewModel(id, newModels) {
+  return Array.isArray(newModels) && newModels.includes(id);
+}
+function hasNewsModels(newModels) {
+  return Array.isArray(newModels) && newModels.length > 0;
+}
+// NEWS-END
+
+// PICK-START
+// 获取模型弹窗纯函数（由 tests/pick_test.mjs 覆盖）
+function initialPickChecked(name, systemNames) {
+  return false;   // 默认不预选任何模型（含新模型），由用户手动勾选，避免打开弹窗即“默认全选”
+}
+// 上新列出现时工具栏加 has-news（对应 CSS padding-left:48px = 6px 行内边距 + 34px 上新列 + 8px 列间距），
+// 让「全选」复选框与行内复选框水平对齐
+function pickToolbarClass(showNewsCol) {
+  return showNewsCol ? "pick-toolbar has-news" : "pick-toolbar";
+}
+// 上新列表头不写「上新」二字，仅保留空占位列（34px）与行内「新」标记对齐
+function pickHeadHtml(showNewsCol) {
+  return (showNewsCol ? '<span class="pick-new-col"></span>' : "") +
+         '<span class="pick-ck"></span>' +
+         '<span class="name">模型名称</span>' +
+         '<span class="up">上游模型名</span><span class="proto">协议</span>';
+}
+// PICK-END
+
+async function openFetchModelsModal(ep) {
+  showModal('<h2>获取模型</h2><p class="empty">正在从 ' + escapeHtml(ep.base_url) +
+            ' 获取模型列表…</p>');
+  let data;
+  try {
+    data = await api("GET", "/admin/api/upstream-models?base_url=" + encodeURIComponent(ep.base_url));
+  } catch (err) {
+    if (!overlay.classList.contains("show")) return;   // 用户已关闭弹窗
+    showModal('<h2>获取模型</h2><p class="empty" style="color:var(--danger)">' +
+              escapeHtml(err.message) + '</p>' +
+              '<div class="modal-actions"><button id="modal-cancel">关闭</button></div>');
+    document.getElementById("modal-cancel").addEventListener("click", closeModal);
+    return;
+  }
+  if (!overlay.classList.contains("show")) return;
+  renderModelPicker(ep, data.models || [], data.new_models || []);
+  // 弹窗打开即静默：清除该接入点的「模型上新」，成功后刷新列表徽标
+  api("POST", "/admin/api/endpoints/models-news", { base_url: ep.base_url })
+    .then(() => loadEndpoints())
+    .catch(() => {});   // 静默失败不影响弹窗使用
+}
+
+function renderModelPicker(ep, ids, newModels = []) {
+  // 系统中已存在的全部模型名（模型名跨接入点唯一）
+  const systemNames = new Set();
+  for (const e of endpoints) for (const m of e.models) systemNames.add(m.name);
+  const prefix = domainLabel(ep.base_url);
+  // 有上新模型才渲染「上新」列（表头与每行占位），否则整列不出现
+  const showNewsCol = hasNewsModels(newModels);
+
+  showModal('<h2>获取模型 · ' + escapeHtml(ep.base_url) + '</h2>', { wide: true });
+  const modal = document.getElementById("modal-content");
+
+  const toolbar = document.createElement("div");
+  toolbar.className = pickToolbarClass(showNewsCol);   // 上新列出现时缩进「全选」，与行内复选框对齐
+  const pickAll = document.createElement("input");
+  pickAll.type = "checkbox";
+  pickAll.className = "pick-ck";
+  const allLabel = document.createElement("label");
+  allLabel.style.cssText = "display:inline-flex;gap:6px;align-items:center;";
+  allLabel.appendChild(pickAll);
+  allLabel.appendChild(document.createTextNode("全选"));
+  const info = document.createElement("span");
+  info.style.flex = "1";
+  toolbar.append(allLabel, info);
+  modal.appendChild(toolbar);
+
+  if (ids.length === 0) {
+    modal.appendChild(Object.assign(document.createElement("p"), {
+      className: "empty", textContent: "上游未返回任何模型",
+    }));
+    const acts = document.createElement("div");
+    acts.className = "modal-actions";
+    const cancel = document.createElement("button");
+    cancel.textContent = "关闭";
+    cancel.addEventListener("click", closeModal);
+    acts.appendChild(cancel);
+    modal.appendChild(acts);
+    return;
+  }
+
+  const head = document.createElement("div");
+  head.className = "pick-head";
+  head.innerHTML = pickHeadHtml(showNewsCol);
+  modal.appendChild(head);
+
+  // 已存在模型 -> 协议映射（用于回显）
+  const existingProto = new Map();
+  for (const e of endpoints) for (const m of e.models) if (m.protocol) existingProto.set(m.name, m.protocol);
+
+  const list = document.createElement("div");
+  list.className = "pick-list";
+  for (const id of ids) {
+    const name = prefix + "/" + id;
+    const row = document.createElement("div");
+    row.className = "pick-row";
+    // 「新」标记独占固定宽度列（仅当展示该列时渲染；无标记的行也渲染空占位，保持列对齐）
+    const newCol = showNewsCol ? document.createElement("span") : null;
+    if (newCol !== null) {
+      newCol.className = "pick-new-col";
+      if (isNewModel(id, newModels)) {
+        const chip = document.createElement("span");
+        chip.className = "pick-new";
+        chip.textContent = "新";
+        newCol.appendChild(chip);
+      }
+    }
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.className = "pick-ck";
+    check.checked = initialPickChecked(name, systemNames);   // 默认不预选，由用户手动勾选
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.className = "pick-name";
+    nameInput.value = name;
+    nameInput.placeholder = "模型名称";
+    const upInput = document.createElement("input");
+    upInput.type = "text";
+    upInput.className = "pick-upstream";
+    upInput.value = id;
+    upInput.placeholder = "上游模型名";
+    // 协议下拉：已存在模型回显已有协议，新模型默认"不限制（直通）"
+    const protoSelect = document.createElement("select");
+    protoSelect.className = "pick-proto";
+    const curProto = existingProto.get(name) || "";
+    for (const [val, label] of [["", "不限制"], ["anthropic_messages", "anthropic"],
+                                ["openai_chat", "openai"], ["openai_responses", "openai-responses"]]) {
+      const opt = document.createElement("option");
+      opt.value = val;
+      opt.textContent = label;
+      if (val === curProto) opt.selected = true;
+      protoSelect.appendChild(opt);
+    }
+    if (newCol !== null) row.append(newCol);
+    row.append(check, nameInput, upInput, protoSelect);
+    list.appendChild(row);
+  }
+  modal.appendChild(list);
+
+  const acts = document.createElement("div");
+  acts.className = "modal-actions";
+  const cancel = document.createElement("button");
+  cancel.textContent = "取消";
+  cancel.addEventListener("click", closeModal);
+  const confirmBtn = document.createElement("button");
+  confirmBtn.className = "primary";
+  confirmBtn.textContent = "确认添加";
+  confirmBtn.disabled = true;
+  acts.append(cancel, confirmBtn);
+  modal.appendChild(acts);
+
+  function refreshMarks() {
+    const names = [...list.querySelectorAll(".pick-name")].map(i => i.value.trim());
+    let dupCount = 0, freeCount = 0;
+    list.querySelectorAll(".pick-row").forEach((r, i) => {
+      const dup = isDuplicateName(names[i], systemNames, names);
+      const free = isFreeModel(r.querySelector(".pick-upstream").value);
+      r.classList.toggle("dup", dup);
+      r.classList.toggle("free", !dup && free);   // 标红优先于标绿
+      if (dup) dupCount++;
+      else if (free) freeCount++;
+    });
+    let text = "共 " + ids.length + " 个模型";
+    if (freeCount) text += " · " + freeCount + " 个免费（绿）";
+    if (dupCount) text += " · " + dupCount + " 个名称已存在（红）";
+    const newCount = list.querySelectorAll(".pick-new").length;
+    if (newCount) text += " · " + newCount + " 个上新";
+    info.textContent = text;
+  }
+  function refreshChecks() {
+    const boxes = [...list.querySelectorAll(".pick-ck")];
+    pickAll.checked = boxes.length > 0 && boxes.every(b => b.checked);
+    const n = boxes.filter(b => b.checked).length;
+    confirmBtn.textContent = "确认添加 (" + n + ")";
+    confirmBtn.disabled = n === 0;
+  }
+  pickAll.addEventListener("change", () => {
+    for (const b of list.querySelectorAll(".pick-ck")) b.checked = pickAll.checked;
+    refreshChecks();
+  });
+  list.querySelectorAll(".pick-ck").forEach(b => b.addEventListener("change", refreshChecks));
+  list.querySelectorAll(".pick-name").forEach(i => i.addEventListener("input", refreshMarks));
+  list.querySelectorAll(".pick-upstream").forEach(i => i.addEventListener("input", refreshMarks));
+  refreshMarks();
+  refreshChecks();
+
+  confirmBtn.addEventListener("click", async () => {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "添加中…";
+    let added = 0, skipped = 0;
+    const errors = [];
+    for (const row of list.querySelectorAll(".pick-row")) {
+      if (!row.querySelector(".pick-ck").checked) continue;
+      const name = row.querySelector(".pick-name").value.trim();
+      const upstream = row.querySelector(".pick-upstream").value.trim();
+      const proto = row.querySelector(".pick-proto").value || null;
+      if (!name) { skipped++; continue; }
+      try {
+        await api("POST", "/admin/api/endpoints/models?base_url=" + encodeURIComponent(ep.base_url),
+                  { name, upstream_model: upstream || null, system_prompt: null, pricing: null,
+                    protocol: proto });
+        added++;
+      } catch (err) {
+        errors.push(name + "：" + err.message);
+      }
+    }
+    closeModal();
+    await loadEndpoints();
+    if (added) {
+      toast("已添加 " + added + " 个模型" + (skipped ? "，跳过 " + skipped + " 个空名称" : ""), "success");
+    }
+    if (errors.length) {
+      toast("失败 " + errors.length + " 个：" + errors.slice(0, 3).join("；") +
+            (errors.length > 3 ? " …" : ""), "error");
+    }
+  });
+}
+
+function confirmDialog(message) {
+  return new Promise((resolve) => {
+    showModal(
+      '<h2>确认</h2>' +
+      '<p>' + escapeHtml(message) + '</p>' +
+      '<div class="modal-actions">' +
+      '  <button id="modal-cancel">取消</button>' +
+      '  <button id="modal-confirm" class="danger">确认</button>' +
+      '</div>'
+    );
+    document.getElementById("modal-cancel").addEventListener("click", () => { closeModal(); resolve(false); });
+    document.getElementById("modal-confirm").addEventListener("click", () => { closeModal(); resolve(true); });
+  });
+}
+
+async function deleteEndpoint(baseUrl) {
+  try {
+    await api("DELETE", "/admin/api/endpoints?base_url=" + encodeURIComponent(baseUrl));
+    expanded.delete(baseUrl);
+    toast("已删除接入点", "success");
+    await loadEndpoints();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function deleteModel(baseUrl, name) {
+  try {
+    await api("DELETE", "/admin/api/endpoints/models?base_url=" + encodeURIComponent(baseUrl)
+              + "&name=" + encodeURIComponent(name));
+    toast("已删除模型", "success");
+    await loadEndpoints();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function loadServerInfo() {
+  try {
+    serverInfo = await api("GET", "/admin/api/server");
+  } catch (err) {
+    serverInfo = null;   // 拿不到哨兵时生成的 curl 不带鉴权头
+  }
+}
+
+// 复制请求网关的 curl：模型标记了协议则直接生成复制；
+// 未标记则弹窗让用户选择协议后再复制。
+async function copyModelCurl(model) {
+  if (!serverInfo) await loadServerInfo();
+  const apiKey = (serverInfo && serverInfo.api_key) || "";
+  const base = window.location.origin;
+  const curl = model.protocol ? buildModelCurl(model.protocol, model.name, base, apiKey) : null;
+  if (curl) {
+    await copyText(curl);
+    return;
+  }
+  showProtocolPicker(model, base, apiKey);
+}
+
+function showProtocolPicker(model, baseUrl, apiKey) {
+  const items = [
+    ["anthropic_messages", "Anthropic Messages", "/v1/messages"],
+    ["openai_chat", "OpenAI Chat", "/v1/chat/completions"],
+    ["openai_responses", "OpenAI Responses", "/v1/responses"],
+  ];
+  showModal(
+    '<h2>选择请求协议</h2>' +
+    '<p>模型 <b class="code">' + escapeHtml(model.name) + '</b> 未标记协议，请选择 curl 使用的请求协议：</p>' +
+    '<div class="modal-actions protocol-picker">' +
+    items.map(([p, label, path]) =>
+      '<button class="protocol-btn" data-protocol="' + p + '">' + escapeHtml(label) +
+      '<small>POST ' + escapeHtml(path) + '</small></button>').join("") +
+    '</div>'
+  );
+  for (const btn of document.querySelectorAll(".protocol-btn")) {
+    btn.addEventListener("click", () => {
+      closeModal();
+      copyText(buildModelCurl(btn.dataset.protocol, model.name, baseUrl, apiKey));
+    });
+  }
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("curl 已复制到剪贴板", "success");
+    return;
+  } catch (err) { /* 回退到 execCommand */ }
+  // 剪贴板 API 不可用（非安全上下文等）时：隐藏 textarea + execCommand
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+  ta.remove();
+  if (ok) toast("curl 已复制到剪贴板", "success");
+  else toast("复制失败，请检查浏览器剪贴板权限", "error");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+const PALETTE = ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
+
+function color(i) { return PALETTE[i % PALETTE.length]; }
+
+function fmtMinute(ts) {
+  const d = new Date(ts * 1000);
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
+function totalTokensOf(t) {
+  return (t.input || 0) + (t.cache_read || 0) + (t.cache_write || 0) + (t.output || 0);
+}
+
+// MODELS-SORT-START
+// Sorting for the models tab (click a table header to sort). Pure functions:
+// return NEW values, inputs untouched. Missing values (null protocol /
+// upstream_model / system_prompt shown as —) count as greater than any
+// value: ascending puts them last, descending first (plain reversal).
+// Ties on the primary key break by model name, ALWAYS ascending (统一),
+// regardless of primary key/direction — model names are globally unique
+// (config validation), so this yields a deterministic total order.
+// Tested by tests/models_sort_test.mjs.
+const MODEL_SORT_KEYS = new Set(["name", "endpoint", "upstream_model", "system_prompt", "protocol"]);
+
+function _modelSortValue(row, key) {
+  if (key === "endpoint") return row.baseUrl;
+  return row.model[key];
+}
+
+function sortModelRows(rows, key, dir) {
+  if (!MODEL_SORT_KEYS.has(key)) return [...rows];
+  const factor = dir === "desc" ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const va = _modelSortValue(a, key), vb = _modelSortValue(b, key);
+    const ma = va === null || va === undefined || va === "";
+    const mb = vb === null || vb === undefined || vb === "";
+    let cmp = 0;
+    if (ma && mb) cmp = 0;
+    else if (ma) cmp = 1;    // missing = +∞
+    else if (mb) cmp = -1;
+    else cmp = String(va).localeCompare(String(vb));
+    if (cmp !== 0) return factor * cmp;
+    // secondary: model name, always ascending
+    return String(a.model.name).localeCompare(String(b.model.name));
+  });
+}
+
+// Header-click state machine: none -> asc -> desc -> back to config order.
+function nextSortState(current, key) {
+  if (!MODEL_SORT_KEYS.has(key)) return { key: "default", dir: "asc" };
+  if (current.key !== key) return { key, dir: "asc" };
+  if (current.dir === "asc") return { key, dir: "desc" };
+  return { key: "default", dir: "asc" };
+}
+// MODELS-SORT-END
+
+// TABHASH-START
+// Tab persistence via the URL hash: switching tabs rewrites the hash with
+// history.replaceState (no back-button noise), a refresh restores the tab.
+// Pure parser tested by tests/tab_test.mjs via these markers.
+const KNOWN_TABS = new Set(["endpoints", "models", "stats", "requests"]);
+
+function tabFromHash(hash) {
+  const tab = String(hash || "").replace(/^#/, "");
+  return KNOWN_TABS.has(tab) ? tab : "endpoints";
+}
+// TABHASH-END
+
+// CURL-START
+// Builds a ready-to-run curl command that calls the gateway itself for the
+// given model, using the request path and body shape of the model's
+// protocol. Pure function (no DOM) — tested by tests/curl_test.mjs via these
+// markers. The apiKey is server.api_key (the sentinel): sending it makes the
+// gateway drop it and use the endpoint's configured real key instead.
+const CURL_SPECS = {
+  anthropic_messages: {
+    path: "/v1/messages",
+    extraHeaders: [["anthropic-version", "2023-06-01"]],
+    body: (name) => ({ model: name, max_tokens: 1024, messages: [{ role: "user", content: "hi" }] }),
+  },
+  openai_chat: {
+    path: "/v1/chat/completions",
+    extraHeaders: [],
+    body: (name) => ({ model: name, messages: [{ role: "user", content: "hi" }] }),
+  },
+  openai_responses: {
+    path: "/v1/responses",
+    extraHeaders: [],
+    body: (name) => ({ model: name, input: "hi" }),
+  },
+};
+
+function shellQuote(s) {
+  // JSON.stringify never escapes single quotes, so escape them for the
+  // shell's single-quoted -d argument ourselves (' -> '\'' ).
+  return "'" + String(s).replace(/'/g, "'\\''") + "'";
+}
+
+function buildModelCurl(protocol, modelName, baseUrl, apiKey) {
+  const spec = CURL_SPECS[protocol];
+  if (!spec) return null;
+  // --compressed: advertise gzip and auto-decompress the response. The
+  // gateway only forwards gzip/deflate/identity upstream (br/zstd stripped
+  // in _build_upstream_headers), so this stays compatible.
+  // Each -H/-d goes on its own line with a shell continuation so long
+  // commands stay readable when pasted into a terminal.
+  const lines = ["curl --compressed -X POST " + shellQuote(baseUrl.replace(/\/+$/, "") + spec.path)];
+  if (apiKey) lines.push("-H " + shellQuote("Authorization: Bearer " + apiKey));
+  for (const [k, v] of spec.extraHeaders) lines.push("-H " + shellQuote(k + ": " + v));
+  lines.push("-H " + shellQuote("Content-Type: application/json"));
+  lines.push("-d " + shellQuote(JSON.stringify(spec.body(modelName))));
+  return lines.join(" \\\n  ");
+}
+// CURL-END
+
+// BUCKETING-START
+// Adaptive bucketing: when the per-minute series gets too long for the
+// card width (bars turn into 1-2px mush), merge minute buckets into wider
+// clock-aligned buckets (05/10/15/30/60 min) so the bar count stays <=
+// MAX_BUCKETS. tokens/costs aggregate per model. Width 1 (or a caller's
+// forceWidth) keeps the original granularity.
+const MAX_BUCKETS = 120;
+const BUCKET_WIDTHS = [1, 2, 5, 10, 15, 30, 60];
+
+function pickBucketWidth(count) {
+  for (const w of BUCKET_WIDTHS) {
+    if (Math.ceil(count / w) <= MAX_BUCKETS) return w;
+  }
+  return BUCKET_WIDTHS[BUCKET_WIDTHS.length - 1];
+}
+
+function bucketMinutes(minutes, opts) {
+  if (!minutes || minutes.length === 0) return [];
+  const width = (opts && opts.forceWidth) || pickBucketWidth(minutes.length);
+  if (width === 1) return minutes;
+  const widthSec = width * 60;
+  const byBucket = new Map();
+  for (const m of minutes) {
+    const key = Math.floor(m.ts / widthSec) * widthSec;   // clock-aligned
+    let b = byBucket.get(key);
+    if (!b) { b = { ts: key, tokens: {}, costs: {} }; byBucket.set(key, b); }
+    for (const [model, t] of Object.entries(m.tokens || {})) {
+      const acc = b.tokens[model] || (b.tokens[model] = {});
+      for (const k of ["input", "cache_read", "cache_write", "output"]) {
+        acc[k] = (acc[k] || 0) + (t[k] || 0);
+      }
+    }
+    for (const [model, c] of Object.entries(m.costs || {})) {
+      b.costs[model] = (b.costs[model] || 0) + c;
+    }
+  }
+  return [...byBucket.values()].sort((a, b) => a.ts - b.ts);
+}
+
+function bucketLabel(ts, widthMin) {
+  const d = new Date(ts * 1000);
+  const hm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  return widthMin % 60 === 0 && widthMin >= 60
+    ? String(d.getMonth() + 1) + "/" + String(d.getDate()) + " " + hm
+    : hm;
+}
+// BUCKETING-END
+
+function fmtTokens(n) {
+  if (n > 1e18) return (n / 1e18).toFixed(2) + "E";   // > 1E: 2 decimals
+  if (n > 1e6) return (n / 1e6).toFixed(1) + "M";      // > 1M: 1 decimal
+  return String(n);
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+function destroyStatsCharts() {
+  statsCharts.forEach(c => c.destroy());
+  statsCharts = [];
+}
+
+async function loadStatsTop() {
+  try {
+    statsData = await api("GET", "/admin/api/stats/day?date=" + encodeURIComponent(todayStr()));
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  renderStatsTop();
+  loadModelTps();
+}
+
+async function loadModelTps() {
+  let tpsData;
+  try {
+    tpsData = await api("GET", "/admin/api/stats/model-tps?date=" + encodeURIComponent(todayStr()));
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  renderModelTps(tpsData);
+}
+
+let tpsLogScale = null;   // null = 首次渲染时按数据离散度自动选择（最大/最小 ≥ 8 倍用对数）
+let lastTpsRows = null;   // 缓存最近一次数据，切换刻度时原地重绘，不重新请求
+
+// 条端直接标注数值：对数刻度下条长不再与数值成正比，数值必须直接可见（不依赖 tooltip）
+const tpsValueLabels = {
+  id: "tpsValueLabels",
+  afterDatasetsDraw(chart) {
+    const meta = chart.getDatasetMeta(0);
+    if (!meta) return;
+    const data = chart.data.datasets[0].data;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = "11px -apple-system, 'PingFang SC', 'Segoe UI', sans-serif";
+    ctx.fillStyle = "#6b7280";   // 次要文字色（--muted），标签不使用系列色
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < meta.data.length; i++) {
+      const bar = meta.data[i];
+      if (!bar) continue;
+      const v = data[i];
+      ctx.fillText(v >= 10 ? String(Math.round(v)) : v.toFixed(1), bar.x + 6, bar.y);
+    }
+    ctx.restore();
+  },
+};
+
+function nice125Above(v) {
+  const e = Math.floor(Math.log10(v));
+  for (const ee of [e, e + 1]) {
+    for (const m of [1, 2, 5]) {
+      const c = m * Math.pow(10, ee);
+      if (c >= v) return c;
+    }
+  }
+  return Math.pow(10, e + 1);
+}
+
+function tpsScaleConfig(rows) {
+  if (!tpsLogScale) {
+    return { beginAtZero: true, title: { display: true, text: "tokens/s" } };
+  }
+  const vals = rows.map(r => r.tps);
+  const minVal = Math.min(...vals);
+  const maxVal = Math.max(...vals);
+  return {
+    type: "logarithmic",
+    // 基线取最小值之下最近的 10 的幂，最短条仍有可读长度；上限取 1/2/5 序列留出条端标签空间
+    min: Math.pow(10, Math.ceil(Math.log10(minVal > 0 ? minVal : 1)) - 1),
+    max: nice125Above(maxVal),
+    afterBuildTicks: (scale) => {
+      const ticks = [];
+      for (let e = Math.floor(Math.log10(scale.min)); e <= Math.ceil(Math.log10(scale.max)); e++) {
+        for (const m of [1, 2, 5]) {
+          const v = m * Math.pow(10, e);
+          if (v >= scale.min * 0.999 && v <= scale.max * 1.001) ticks.push({ value: v });
+        }
+      }
+      if (ticks.length) scale.ticks = ticks;
+    },
+    title: { display: true, text: "tokens/s（对数刻度）" },
+  };
+}
+
+function updateTpsScaleBtn() {
+  const btn = document.getElementById("tps-scale-btn");
+  if (btn) btn.textContent = "刻度：" + (tpsLogScale ? "对数" : "线性");
+}
+
+function renderModelTps(rows) {
+  lastTpsRows = rows;
+  const el = document.getElementById("chart-model-tps");
+  const empty = document.getElementById("empty-model-tps");
+  // Destroy previous instance on this canvas
+  const existing = statsCharts.find(c => c.canvas && c.canvas.id === "chart-model-tps");
+  if (existing) { existing.destroy(); statsCharts = statsCharts.filter(c => c !== existing); }
+  if (!rows || rows.length === 0) {
+    if (el) el.style.display = "none";
+    if (empty) empty.style.display = "";
+    return;
+  }
+  if (tpsLogScale === null) {
+    const vals = rows.map(r => r.tps);
+    tpsLogScale = Math.max(...vals) / Math.min(...vals) >= 8;   // 离散 ≥ 8 倍时对数刻度让短条可读
+  }
+  updateTpsScaleBtn();
+  if (el) el.style.display = "";
+  if (empty) empty.style.display = "none";
+  statsCharts.push(new Chart(el, {
+    type: "bar",
+    data: {
+      labels: rows.map(r => r.model),
+      datasets: [{
+        label: "解码 TPS",
+        data: rows.map(r => r.tps),
+        // 颜色跟随模型（与上方占比图一致），不跟随 TPS 排名
+        backgroundColor: rows.map((r, i) => {
+          const idx = statsData && statsData.models ? statsData.models.indexOf(r.model) : -1;
+          return color(idx >= 0 ? idx : i);
+        }),
+        borderRadius: 4,        // 只圆数据端（borderSkipped 默认跳过基线端）
+        maxBarThickness: 30,    // 细条形 + 条间留白
+        barPercentage: 0.7,
+      }],
+    },
+    options: {
+      indexAxis: "y",   // horizontal bars
+      maintainAspectRatio: false,   // canvas fills the card (card height = grid row height)
+      layout: { padding: { right: 40 } },   // 给条端数值标签留空间
+      onClick: (_e, elements) => {
+        if (elements.length === 0) return;
+        const model = rows[elements[0].index].model;
+        const sel = document.getElementById("model-detail-select");
+        if (sel && statsData && statsData.models.includes(model)) {
+          sel.value = model;
+          renderModelDetail(model);
+        }
+      },
+      scales: {
+        x: tpsScaleConfig(rows),
+      },
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: "模型解码速度（最近 5 次请求平均）· 点击查看 token 构成" },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const r = rows[ctx.dataIndex];
+              const ttft = r.avg_ttft_ms === null ? "未知"
+                : (r.avg_ttft_ms >= 1000 ? (r.avg_ttft_ms / 1000).toFixed(2) + " s"
+                                         : Math.round(r.avg_ttft_ms) + " ms");
+              return [(Math.round(ctx.parsed.x * 10) / 10) + " tokens/s",
+                      "平均 TTFT: " + ttft,
+                      "采样: 最近 " + r.samples + " 次"];
+            },
+          },
+        },
+      },
+    },
+    plugins: [tpsValueLabels],
+  }));
+}
+
+function setChartEmpty(chartId, emptyId, isEmpty) {
+  const canvas = document.getElementById(chartId);
+  const empty = document.getElementById(emptyId);
+  if (canvas) canvas.style.display = isEmpty ? "none" : "";
+  if (empty) empty.style.display = isEmpty ? "" : "none";
+}
+
+function renderStatsTop() {
+  destroyStatsCharts();
+  const isEmpty = !statsData || statsData.minutes.length === 0;
+  setChartEmpty("chart-pie", "empty-pie", isEmpty);
+  setChartEmpty("chart-model-bars", "empty-model-bars", isEmpty);
+  setChartEmpty("chart-cost-pie", "empty-cost-pie", isEmpty);
+  setChartEmpty("chart-cost-bars", "empty-cost-bars", isEmpty);
+  // One bucketing pass shared by every chart on this tab: minutes merge into
+  // clock-aligned wider buckets when the bar count would exceed MAX_BUCKETS.
+  // Must run BEFORE renderModelDetail — it consumes the bucketed series.
+  bucketed = isEmpty ? [] : bucketMinutes(statsData.minutes);
+  bucketWidthMin = bucketed.length > 1
+    ? Math.round((bucketed[bucketed.length - 1].ts - bucketed[0].ts) / (bucketed.length - 1) / 60) || 1
+    : 1;
+  populateModelDetailSelect();
+  renderModelDetail(document.getElementById("model-detail-select").value);
+  if (isEmpty) return;
+  renderPie();
+  renderModelBars();
+  renderCostPie();
+  renderCostBars();
+}
+
+function renderPie() {
+  const totals = {};
+  for (const m of bucketed) {
+    for (const [model, t] of Object.entries(m.tokens)) {
+      totals[model] = (totals[model] || 0) + totalTokensOf(t);
+    }
+  }
+  const labels = statsData.models.filter(m => totals[m]);
+  const data = labels.map(m => totals[m]);
+  const grand = data.reduce((a, b) => a + b, 0);
+  const el = document.getElementById("chart-pie");
+  statsCharts.push(new Chart(el, {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: labels.map((_, i) => color(i)), borderWidth: 0 }],
+    },
+    options: {
+      plugins: {
+        legend: { position: "right" },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ctx.label + ": " + fmtTokens(ctx.parsed) + " tokens (" + (100 * ctx.parsed / grand).toFixed(1) + "%)",
+          },
+        },
+        title: { display: true, text: "今日模型 token 占比 · 总计 " + fmtTokens(grand) + " tokens" },
+      },
+    },
+  }));
+}
+
+function renderModelBars() {
+  if (selectedModel && !statsData.models.includes(selectedModel)) selectedModel = null;
+  document.getElementById("drilldown-bar").style.display = selectedModel ? "flex" : "none";
+  const labels = bucketed.map(x => bucketLabel(x.ts, bucketWidthMin));
+  let datasets;
+  let title;
+  const per = bucketWidthMin > 1 ? "每 " + bucketWidthMin + " 分钟" : "逐分钟";
+  if (selectedModel) {
+    title = selectedModel + " · " + per + " token 构成";
+    datasets = [
+      { label: "输入（未命中）", data: bucketed.map(x => (x.tokens[selectedModel] || {}).input || 0), backgroundColor: color(0), stack: "s" },
+      { label: "输入（缓存命中）", data: bucketed.map(x => (x.tokens[selectedModel] || {}).cache_read || 0), backgroundColor: color(1), stack: "s" },
+      { label: "缓存写入", data: bucketed.map(x => (x.tokens[selectedModel] || {}).cache_write || 0), backgroundColor: color(2), stack: "s" },
+      { label: "输出", data: bucketed.map(x => (x.tokens[selectedModel] || {}).output || 0), backgroundColor: color(3), stack: "s" },
+    ];
+  } else {
+    title = per + "各模型 token 用量";
+    datasets = statsData.models.map((model, i) => ({
+      label: model,
+      data: bucketed.map(x => totalTokensOf(x.tokens[model] || {})),
+      backgroundColor: color(i),
+      stack: "s",
+    }));
+  }
+  const el = document.getElementById("chart-model-bars");
+  statsCharts.push(new Chart(el, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      onClick: (_e, elements, chart) => {
+        if (!selectedModel && elements.length > 0) {
+          const model = chart.data.datasets[elements[0].datasetIndex].label;
+          if (statsData.models.includes(model)) selectModel(model);
+        }
+      },
+      scales: {
+        x: { stacked: true, ticks: { maxTicksLimit: 24 } },
+        y: { stacked: true, title: { display: true, text: "tokens" } },
+      },
+      plugins: {
+        legend: { },
+        title: { display: true, text: title },
+      },
+    },
+  }));
+}
+
+function selectModel(model) {
+  selectedModel = model;
+  renderStatsTop();
+}
+
+function populateModelDetailSelect() {
+  const sel = document.getElementById("model-detail-select");
+  sel.innerHTML = '<option value="">— 请选择 —</option>';
+  if (!statsData) return;
+  for (const model of statsData.models) {
+    const opt = document.createElement("option");
+    opt.value = model;
+    opt.textContent = model;
+    sel.appendChild(opt);
+  }
+  if (statsData.models.length > 0) {
+    sel.value = statsData.models[0];
+    renderModelDetail(sel.value);
+  }
+}
+
+function renderModelDetail(model) {
+  const el = document.getElementById("chart-model-detail");
+  const empty = document.getElementById("empty-model-detail");
+  const hrEl = document.getElementById("model-detail-hitrate");
+  if (!model || !statsData || !statsData.models.includes(model)) {
+    if (el) el.style.display = "none";
+    if (empty) empty.style.display = "";
+    if (hrEl) hrEl.style.display = "none";
+    return;
+  }
+  if (el) el.style.display = "";
+  if (empty) empty.style.display = "none";
+  // Compute today's cache hit rate for this model
+  let totalInput = 0, totalCacheRead = 0, totalCacheWrite = 0;
+  for (const m of bucketed) {
+    const t = m.tokens[model] || {};
+    totalInput += t.input || 0;
+    totalCacheRead += t.cache_read || 0;
+    totalCacheWrite += t.cache_write || 0;
+  }
+  const promptSide = totalInput + totalCacheRead + totalCacheWrite;
+  const hitRate = promptSide > 0 ? (totalCacheRead / promptSide * 100).toFixed(1) : "—";
+  if (hrEl) {
+    hrEl.textContent = "缓存命中率: " + hitRate + (hitRate !== "—" ? "%" : "");
+    hrEl.style.display = "";
+  }
+  // Destroy any existing chart on this canvas
+  const existing = statsCharts.find(c => c.canvas && c.canvas.id === "chart-model-detail");
+  if (existing) { existing.destroy(); statsCharts = statsCharts.filter(c => c !== existing); }
+  const labels = bucketed.map(x => bucketLabel(x.ts, bucketWidthMin));
+  const datasets = [
+    { label: "输入（未命中）", data: bucketed.map(x => (x.tokens[model] || {}).input || 0), backgroundColor: color(0), stack: "s" },
+    { label: "输入（缓存命中）", data: bucketed.map(x => (x.tokens[model] || {}).cache_read || 0), backgroundColor: color(1), stack: "s" },
+    { label: "输出", data: bucketed.map(x => (x.tokens[model] || {}).output || 0), backgroundColor: color(3), stack: "s" },
+  ];
+  const per = bucketWidthMin > 1 ? "每 " + bucketWidthMin + " 分钟" : "逐分钟";
+  statsCharts.push(new Chart(el, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      scales: { x: { stacked: true, ticks: { maxTicksLimit: 24 } }, y: { stacked: true, title: { display: true, text: "tokens" } } },
+      plugins: { title: { display: true, text: model + " · " + per + " token 构成" } },
+    },
+  }));
+}
+
+function renderCostPie() {
+  const totals = {};
+  for (const m of bucketed) {
+    for (const [model, cost] of Object.entries(m.costs)) {
+      totals[model] = (totals[model] || 0) + cost;
+    }
+  }
+  const labels = statsData.models.filter(m => totals[m]);
+  const data = labels.map(m => totals[m]);
+  const grand = data.reduce((a, b) => a + b, 0);
+  const el = document.getElementById("chart-cost-pie");
+  statsCharts.push(new Chart(el, {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: labels.map((_, i) => color(i)), borderWidth: 0 }],
+    },
+    options: {
+      plugins: {
+        legend: { position: "right" },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ctx.label + ": $" + ctx.parsed.toFixed(4) + " (" + (100 * ctx.parsed / grand).toFixed(1) + "%)",
+          },
+        },
+        title: { display: true, text: "今日各模型开销占比 · 总计 $" + grand.toFixed(4) },
+      },
+    },
+  }));
+}
+
+function renderCostBars() {
+  const labels = bucketed.map(x => bucketLabel(x.ts, bucketWidthMin));
+  const datasets = statsData.models.map((model, i) => ({
+    label: model,
+    data: bucketed.map(x => x.costs[model] || 0),
+    backgroundColor: color(i),
+    stack: "s",
+  }));
+  const per = bucketWidthMin > 1 ? "每 " + bucketWidthMin + " 分钟" : "逐分钟";
+  const el = document.getElementById("chart-cost-bars");
+  statsCharts.push(new Chart(el, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      scales: {
+        x: { stacked: true, ticks: { maxTicksLimit: 24 } },
+        y: { stacked: true, title: { display: true, text: "USD" } },
+      },
+      plugins: {
+        legend: { position: "right" },
+        title: { display: true, text: per + "各模型开销 (USD)" },
+      },
+    },
+  }));
+}
+
+function escapeAttr(s) {
+  return escapeHtml(s);
+}
+
+async function loadCards() {
+  let eps;
+  try {
+    eps = await api("GET", "/admin/api/endpoints");
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  const container = document.getElementById("card-list");
+  for (const card of cardStates) {
+    if (card.chart) { card.chart.destroy(); card.chart = null; }
+  }
+  container.innerHTML = "";
+  cardStates = eps.map(ep => ({
+    baseUrl: ep.base_url,
+    from: todayStr(),
+    to: todayStr(),
+    models: [],
+    modelsAll: ep.models.map(m => m.name),
+    data: null,
+    chart: null,
+    granularity: "minute",
+  }));
+  for (const card of cardStates) {
+    container.appendChild(renderCardShell(card));
+    await refreshCard(card);
+  }
+}
+
+function computeGranularity(card) {
+  const hours = (new Date(card.to).getTime() - new Date(card.from).getTime()) / 3600000;
+  if (hours <= 24) card.granularity = "minute";
+  else if (hours <= 72) card.granularity = "hour";
+  else card.granularity = "day";
+}
+
+function renderCardShell(card) {
+  const div = document.createElement("div");
+  div.className = "card-row";
+  div.dataset.baseUrl = card.baseUrl;
+
+  const head = document.createElement("div");
+  head.className = "card-head";
+
+  const url = document.createElement("span");
+  url.className = "url";
+  url.textContent = card.baseUrl;
+  head.appendChild(url);
+
+  const timeWrap = document.createElement("span");
+  timeWrap.style.cssText = "display:inline-flex;align-items:center;gap:6px;white-space:nowrap;";
+  const tLabel = document.createElement("span");
+  tLabel.style.cssText = "font-size:13px;color:var(--muted);";
+  tLabel.textContent = "时间";
+  const fromInput = document.createElement("input");
+  fromInput.type = "date";
+  fromInput.value = card.from;
+  fromInput.title = "开始日期";
+  fromInput.addEventListener("change", () => { card.from = fromInput.value; computeGranularity(card); refreshCard(card); });
+  const sep = document.createElement("span");
+  sep.style.cssText = "color:var(--muted);";
+  sep.textContent = "~";
+  const toInput = document.createElement("input");
+  toInput.type = "date";
+  toInput.value = card.to;
+  toInput.title = "结束日期";
+  toInput.addEventListener("change", () => { card.to = toInput.value; computeGranularity(card); refreshCard(card); });
+  timeWrap.append(tLabel, fromInput, sep, toInput);
+  head.appendChild(timeWrap);
+
+  const modelSel = document.createElement("select");
+  modelSel.multiple = true;
+  modelSel.size = 1;
+  modelSel.title = "模型多选（空 = 全部）";
+  for (const m of card.modelsAll) {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m;
+    modelSel.appendChild(opt);
+  }
+  modelSel.addEventListener("change", () => {
+    card.models = Array.from(modelSel.selectedOptions).map(o => o.value);
+    refreshCard(card);
+  });
+  head.appendChild(modelSel);
+
+  const refreshBtn = document.createElement("button");
+  refreshBtn.textContent = "刷新";
+  refreshBtn.addEventListener("click", (e) => { e.stopPropagation(); refreshCard(card); });
+  head.appendChild(refreshBtn);
+
+  const sums = document.createElement("div");
+  sums.className = "card-sums";
+  sums.id = "sums-" + card.baseUrl.replace(/[^a-zA-Z0-9]/g, "_");
+  head.appendChild(sums);
+
+  const chartWrap = document.createElement("div");
+  const canvas = document.createElement("canvas");
+  canvas.id = "card-chart-" + card.baseUrl.replace(/[^a-zA-Z0-9]/g, "_");
+  chartWrap.appendChild(canvas);
+
+  div.appendChild(head);
+  div.appendChild(chartWrap);
+  div.addEventListener("click", (e) => {
+    if (e.target.closest("select, input, button")) return;
+    openRequests(card.baseUrl, card.from, card.to);
+  });
+  return div;
+}
+
+async function refreshCard(card) {
+  try {
+    computeGranularity(card);
+    const params = new URLSearchParams({ from: card.from, to: card.to, base_url: card.baseUrl, granularity: card.granularity });
+    if (card.models.length) params.set("models", card.models.join(","));
+    card.data = await api("GET", "/admin/api/stats/endpoints?" + params.toString());
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  const sumsEl = document.getElementById("sums-" + card.baseUrl.replace(/[^a-zA-Z0-9]/g, "_"));
+  if (sumsEl) {
+    const fmt = n => (n || 0).toLocaleString();
+    // 卡片仅展示总量级指标；分项（输入/缓存读/写/输出）在使用明细页顶栏
+    sumsEl.innerHTML =
+      "总 token: <b>" + fmt(card.data.total_tokens) + "</b>" +
+      " · 总金额: <b>$" + (card.data.total_cost || 0).toFixed(4) + "</b>" +
+      " · 总命中率: <b>" + ((card.data.cache_hit_rate || 0) * 100).toFixed(1) + "%</b>";
+  }
+  renderCardChart(card);
+}
+
+function fmtBucket(ts, granularity) {
+  const d = new Date(ts * 1000);
+  if (granularity === "day") return (d.getMonth() + 1) + "/" + d.getDate();
+  if (granularity === "hour") return String(d.getMonth() + 1).padStart(2, "0") + "/" + String(d.getDate()).padStart(2, "0") + " " + String(d.getHours()).padStart(2, "0") + ":00";
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
+function renderCardChart(card) {
+  const canvas = document.getElementById("card-chart-" + card.baseUrl.replace(/[^a-zA-Z0-9]/g, "_"));
+  if (!canvas) return;
+  if (card.chart) { card.chart.destroy(); card.chart = null; }
+  if (!card.data || !card.data.minutes || card.data.minutes.length === 0) return;
+  const minutes = card.data.minutes;
+  const models = card.data.per_model.map(p => p.model);
+  const granularity = card.data.granularity || "minute";
+  // Build per-bucket labels and per-model series, then merge buckets when
+  // the bar count would exceed MAX_BUCKETS (same policy as the today tab).
+  const buckets = {};
+  for (const m of minutes) {
+    if (!buckets[m.ts]) buckets[m.ts] = { ts: m.ts, byModel: {}, totalInput: 0, totalCacheRead: 0, totalCacheWrite: 0 };
+    buckets[m.ts].byModel[m.model] = { input: m.input, cache_read: m.cache_read, cache_write: m.cache_write, output: m.output };
+    buckets[m.ts].totalInput += m.input;
+    buckets[m.ts].totalCacheRead += m.cache_read;
+    buckets[m.ts].totalCacheWrite += m.cache_write;
+  }
+  let sortedBuckets = Object.values(buckets).sort((a, b) => a.ts - b.ts);
+  const baseSec = { minute: 60, hour: 3600, day: 86400 }[granularity] || 60;
+  let widthSec = baseSec;
+  if (sortedBuckets.length > MAX_BUCKETS) {
+    const factor = Math.ceil(sortedBuckets.length / MAX_BUCKETS);
+    // widen to a whole multiple of the base granularity, clock-aligned
+    widthSec = factor * baseSec;
+    const merged = new Map();
+    for (const b of sortedBuckets) {
+      const key = Math.floor(b.ts / widthSec) * widthSec;
+      let acc = merged.get(key);
+      if (!acc) { acc = { ts: key, byModel: {}, totalInput: 0, totalCacheRead: 0, totalCacheWrite: 0 }; merged.set(key, acc); }
+      for (const [model, d] of Object.entries(b.byModel)) {
+        const t = acc.byModel[model] || (acc.byModel[model] = { input: 0, cache_read: 0, cache_write: 0, output: 0 });
+        t.input += d.input; t.cache_read += d.cache_read; t.cache_write += d.cache_write; t.output += d.output;
+      }
+      acc.totalInput += b.totalInput;
+      acc.totalCacheRead += b.totalCacheRead;
+      acc.totalCacheWrite += b.totalCacheWrite;
+    }
+    sortedBuckets = [...merged.values()].sort((a, b) => a.ts - b.ts);
+  }
+  const mergedGranularity = widthSec >= 86400 ? "day" : (widthSec >= 3600 ? "hour" : granularity);
+  const labels = sortedBuckets.map(b => fmtBucket(b.ts, mergedGranularity));
+  const datasets = [];
+  for (const model of models) {
+    datasets.push({
+      label: model,
+      data: sortedBuckets.map(b => {
+        const d = b.byModel[model] || {};
+        return (d.input || 0) + (d.cache_read || 0) + (d.cache_write || 0) + (d.output || 0);
+      }),
+      backgroundColor: color(models.indexOf(model)),
+      stack: "s",
+    });
+  }
+  // Cumulative hit rate per bucket
+  const hitRateData = sortedBuckets.map(b => {
+    const denom = b.totalInput + b.totalCacheRead + b.totalCacheWrite;
+    return denom > 0 ? (b.totalCacheRead / denom * 100).toFixed(1) : 0;
+  });
+  card.chart = new Chart(canvas, {
+    type: "bar",
+    data: { labels, datasets: [
+      ...datasets.map(d => ({ ...d, yAxisID: "y" })),
+      { type: "line", label: "命中率 %", data: hitRateData, borderColor: "#dc2626", backgroundColor: "transparent", tension: 0, yAxisID: "y1" },
+    ]},
+    options: {
+      scales: {
+        x: { stacked: true, ticks: { maxTicksLimit: 30 } },
+        y: { stacked: true, title: { display: true, text: "tokens" } },
+        y1: { position: "right", min: 0, max: 100, title: { display: true, text: "命中率 %" } },
+      },
+      plugins: { legend: { position: "bottom" } },
+    },
+  });
+}
+
+// REQSTATE-START
+// 使用明细页筛选状态的持久化（F5 恢复；纯函数由 tests/reqstate_test.mjs 覆盖）
+function encodeRequestsState(state) {
+  return JSON.stringify({
+    baseUrl: state.baseUrl || "",
+    model: state.model || "",
+    from: state.from || "",
+    to: state.to || "",
+  });
+}
+function decodeRequestsState(raw) {
+  try {
+    const s = JSON.parse(raw);
+    if (typeof s !== "object" || s === null || Array.isArray(s)) return null;
+    const str = v => (typeof v === "string" ? v : "");
+    return { baseUrl: str(s.baseUrl), model: str(s.model), from: str(s.from), to: str(s.to) };
+  } catch (e) {
+    return null;
+  }
+}
+// 接入点 → 可选模型列表（空 base_url = 全部接入点的模型并集）
+function modelsForBaseUrl(baseUrl, eps) {
+  if (!Array.isArray(eps)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const ep of eps) {
+    if (baseUrl && ep.base_url !== baseUrl) continue;
+    for (const m of (ep.models || [])) {
+      if (seen.has(m.name)) continue;
+      seen.add(m.name);
+      out.push(m.name);
+    }
+  }
+  return out;
+}
+// 切换接入点后当前模型是否仍有效（无效则清空）
+function keepIfListed(model, listed) {
+  return listed.includes(model) ? model : "";
+}
+// REQSTATE-END
+
+const REQUESTS_STATE_KEY = "requests-filters";
+
+function persistRequestsState() {
+  try {
+    sessionStorage.setItem(REQUESTS_STATE_KEY, encodeRequestsState(requestsState));
+  } catch (e) { /* 隐私模式等场景静默跳过 */ }
+}
+
+function restoreRequestsState() {
+  try {
+    const raw = sessionStorage.getItem(REQUESTS_STATE_KEY);
+    const saved = raw !== null ? decodeRequestsState(raw) : null;
+    if (saved) Object.assign(requestsState, saved);
+  } catch (e) { /* 静默跳过 */ }
+}
+
+function openRequests(baseUrl, from, to) {
+  currentTab = "requests";
+  history.replaceState(null, "", "#requests");
+  requestsState.baseUrl = baseUrl || "";
+  requestsState.model = "";
+  // Card filter is date-only; detail view uses datetime-local inputs.
+  requestsState.from = from ? (from.includes("T") ? from : from + "T00:00") : "";
+  requestsState.to = to ? (to.includes("T") ? to : to + "T23:59") : "";
+  requestsState.offset = 0;
+  requestsState.total = 0;
+  persistRequestsState();
+  render();
+}
+
+async function loadRequests() {
+  if (!requestsState.from || !requestsState.to) {
+    toast("请选择起止时间", "error");
+    return;
+  }
+  const params = new URLSearchParams();
+  params.set("from", requestsState.from);
+  params.set("to", requestsState.to);
+  if (requestsState.baseUrl) params.set("base_url", requestsState.baseUrl);
+  if (requestsState.model) params.set("model", requestsState.model);
+  params.set("limit", String(requestsState.limit));
+  params.set("offset", String(requestsState.offset));
+  let data;
+  try {
+    data = await api("GET", "/admin/api/requests?" + params.toString());
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  requestsState.total = data.total;
+  renderRequestsTotals(data.totals);
+  renderRequestsTable(data.items);
+}
+
+function renderRequestsTotals(totals) {
+  // 使用明细页顶栏：与当前过滤条件同口径的分项汇总
+  const el = document.getElementById("requests-totals");
+  if (!el) return;
+  if (!totals) { el.innerHTML = ""; return; }
+  const fmt = n => (n || 0).toLocaleString();
+  el.innerHTML =
+    "输入: <b>" + fmt(totals.input) + "</b>" +
+    " · 缓存读: <b>" + fmt(totals.cache_read) + "</b>" +
+    " · 缓存写: <b>" + fmt(totals.cache_write) + "</b>" +
+    " · 输出: <b>" + fmt(totals.output) + "</b>" +
+    " · 总命中率: <b>" + ((totals.cache_hit_rate || 0) * 100).toFixed(1) + "%</b>";
+}
+
+function renderRequestsTable(items) {
+  const wrap = document.getElementById("requests-table-wrap");
+  if (items.length === 0) {
+    wrap.innerHTML = '<div class="empty">暂无请求记录</div>';
+  } else {
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    thead.innerHTML = "<tr><th>时间</th><th>接入点</th><th>模型</th><th>输入</th><th>缓存读</th><th>缓存写</th><th>输出</th><th>状态</th><th>成本</th></tr>";
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    for (const it of items) {
+      const tr = document.createElement("tr");
+      const ts = new Date(it.ts * 1000);
+      const timeStr = ts.getFullYear() + "-" + String(ts.getMonth() + 1).padStart(2, "0") + "-"
+        + String(ts.getDate()).padStart(2, "0") + " " + String(ts.getHours()).padStart(2, "0")
+        + ":" + String(ts.getMinutes()).padStart(2, "0") + ":" + String(ts.getSeconds()).padStart(2, "0");
+      const cells = [
+        timeStr, it.base_url, it.model,
+        String(it.input_tokens), String(it.cache_read_tokens), String(it.cache_write_tokens),
+        String(it.output_tokens), String(it.status),
+        it.cost_usd === null ? "—" : "$" + it.cost_usd.toFixed(4),
+      ];
+      for (const c of cells) {
+        const td = document.createElement("td");
+        td.textContent = c;
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    wrap.innerHTML = "";
+    wrap.appendChild(table);
+  }
+  const pager = document.getElementById("requests-pager");
+  const pages = Math.ceil(requestsState.total / requestsState.limit) || 1;
+  const page = Math.floor(requestsState.offset / requestsState.limit) + 1;
+  pager.innerHTML =
+    '<button id="req-prev" ' + (requestsState.offset === 0 ? "disabled" : "") + '>上一页</button>' +
+    '<span>第 ' + page + ' / ' + pages + ' 页 · 共 ' + requestsState.total + ' 条</span>' +
+    '<button id="req-next" ' + (requestsState.offset + requestsState.limit >= requestsState.total ? "disabled" : "") + '>下一页</button>';
+  document.getElementById("req-prev").addEventListener("click", () => {
+    requestsState.offset = Math.max(0, requestsState.offset - requestsState.limit);
+    loadRequests();
+  });
+  document.getElementById("req-next").addEventListener("click", () => {
+    requestsState.offset += requestsState.limit;
+    loadRequests();
+  });
+}
+
+function renderRequestsFilters() {
+  const wrap = document.getElementById("requests-filters");
+  wrap.innerHTML = "";
+  // 统计行也要清空：查询按钮挂在那里，不清空会在每次重渲染时叠加
+  const totalsRow = document.querySelector(".requests-totals-row");
+  if (totalsRow) {
+    totalsRow.innerHTML = "";
+    const totalsEl = document.createElement("div");
+    totalsEl.className = "card-sums";
+    totalsEl.id = "requests-totals";
+    totalsEl.style.margin = "0";
+    totalsRow.appendChild(totalsEl);
+  }
+
+  // 单行：返回按钮 + 接入点/模型选择器 + 日期组（nowrap）+ 查询按钮
+  const row = document.createElement("div");
+  row.className = "requests-filters";
+  const back = document.createElement("button");
+  back.textContent = "← 返回统计";
+  back.addEventListener("click", () => switchTab("stats"));
+  row.appendChild(back);
+
+  const epSel = document.createElement("select");
+  epSel.id = "req-base-url";
+  const optAll = document.createElement("option");
+  optAll.value = "";
+  optAll.textContent = "全部接入点";
+  epSel.appendChild(optAll);
+  for (const ep of endpoints) {
+    const opt = document.createElement("option");
+    opt.value = ep.base_url;
+    opt.textContent = ep.base_url;
+    epSel.appendChild(opt);
+  }
+  epSel.value = requestsState.baseUrl;
+  epSel.title = epSel.value || "全部接入点";
+
+  const modelSel = document.createElement("select");
+  modelSel.id = "req-model";
+
+  // 按当前接入点构建模型选项；接入点切换时联动重建（选中模型不在新列表则清空）
+  function rebuildModelOptions() {
+    modelSel.innerHTML = "";
+    const optAllM = document.createElement("option");
+    optAllM.value = "";
+    optAllM.textContent = "全部模型";
+    modelSel.appendChild(optAllM);
+    for (const name of modelsForBaseUrl(epSel.value, endpoints)) {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      modelSel.appendChild(opt);
+    }
+    modelSel.value = keepIfListed(requestsState.model, modelsForBaseUrl(epSel.value, endpoints));
+    modelSel.title = modelSel.value || "全部模型";
+  }
+  rebuildModelOptions();
+
+  epSel.addEventListener("change", () => {
+    epSel.title = epSel.value || "全部接入点";
+    requestsState.model = "";   // 切接入点时清内存中的模型选择，避免提交陈旧值
+    rebuildModelOptions();
+  });
+  row.appendChild(epSel);
+
+  modelSel.addEventListener("change", () => { modelSel.title = modelSel.value || "全部模型"; });
+  row.appendChild(modelSel);
+
+  // 两个日期 + ~ 打包为 nowrap 组，换行永远不落在中间
+  const timeGroup = document.createElement("span");
+  timeGroup.className = "req-time-group";
+  const fromInput = document.createElement("input");
+  fromInput.type = "datetime-local";
+  fromInput.id = "req-from";
+  fromInput.value = requestsState.from;
+  const tsep = document.createElement("span");
+  tsep.style.cssText = "color:var(--muted);";
+  tsep.textContent = "~";
+  const toInput = document.createElement("input");
+  toInput.type = "datetime-local";
+  toInput.id = "req-to";
+  toInput.value = requestsState.to;
+  timeGroup.append(fromInput, tsep, toInput);
+  row.appendChild(timeGroup);
+  wrap.appendChild(row);
+
+  // 查询按钮挂在统计行右侧（统计行由 renderRequestsTotals 渲染，按钮先行注入）
+  const queryBtn = document.createElement("button");
+  queryBtn.textContent = "查询";
+  queryBtn.className = "primary req-query-btn";
+  queryBtn.addEventListener("click", () => {
+    requestsState.baseUrl = document.getElementById("req-base-url").value;
+    requestsState.model = document.getElementById("req-model").value;
+    requestsState.from = document.getElementById("req-from").value;
+    requestsState.to = document.getElementById("req-to").value;
+    requestsState.offset = 0;
+    persistRequestsState();
+    loadRequests();
+  });
+  document.querySelector(".requests-totals-row").appendChild(queryBtn);
+}
+
+document.getElementById("add-endpoint-btn").addEventListener("click", () => openEndpointModal(null));
+document.getElementById("extra-body-btn").addEventListener("click", () => openExtraBodyModal());
+document.getElementById("refresh-btn").addEventListener("click", () => {
+  if (currentTab === "stats") { loadStatsTop(); loadCards(); }
+  else { loadEndpoints(); }
+});
+document.getElementById("tab-endpoints").addEventListener("click", () => switchTab("endpoints"));
+document.getElementById("tab-models").addEventListener("click", () => switchTab("models"));
+document.getElementById("tab-stats").addEventListener("click", () => switchTab("stats"));
+document.getElementById("back-all-models").addEventListener("click", () => { selectedModel = null; renderStatsTop(); });
+document.getElementById("model-detail-select").addEventListener("change", (e) => { renderModelDetail(e.target.value); });
+document.getElementById("refresh-overview-btn").addEventListener("click", () => { loadStatsTop(); });
+document.getElementById("refresh-model-detail-btn").addEventListener("click", () => { loadModelTps(); loadStatsTop(); });
+document.getElementById("tps-scale-btn").addEventListener("click", () => {
+  tpsLogScale = !tpsLogScale;
+  updateTpsScaleBtn();
+  if (lastTpsRows) renderModelTps(lastTpsRows);
+});
+
+// Refresh restores the tab from the URL hash (written by switchTab), and the
+// requests view also restores its filter state from sessionStorage.
+currentTab = tabFromHash(location.hash);
+if (currentTab === "requests") restoreRequestsState();
+loadEndpoints();
+loadServerInfo();
+</script>
+</body>
+</html>

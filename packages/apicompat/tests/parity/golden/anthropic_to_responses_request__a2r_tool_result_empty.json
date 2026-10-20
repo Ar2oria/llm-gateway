@@ -1,0 +1,59 @@
+{
+  "direction": "anthropic_to_responses_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "toolu_01C",
+            "name": "run",
+            "input": {}
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_01C"
+          }
+        ]
+      }
+    ]
+  },
+  "name": "a2r_tool_result_empty",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "input": [
+      {
+        "type": "function_call",
+        "call_id": "toolu_01C",
+        "name": "run",
+        "arguments": "{}"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "toolu_01C",
+        "output": "(empty)"
+      }
+    ],
+    "max_output_tokens": 500,
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "store": false,
+    "parallel_tool_calls": true,
+    "reasoning": {
+      "effort": "medium",
+      "summary": "auto"
+    },
+    "text": {
+      "verbosity": "medium"
+    }
+  }
+}

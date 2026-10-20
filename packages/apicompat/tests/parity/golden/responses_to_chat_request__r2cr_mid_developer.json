@@ -1,0 +1,46 @@
+{
+  "direction": "responses_to_chat_request",
+  "input": {
+    "model": "gpt-4o",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "start"
+      },
+      {
+        "type": "message",
+        "role": "developer",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "mid notice"
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "role": "user",
+        "content": "end"
+      }
+    ]
+  },
+  "name": "r2cr_mid_developer",
+  "output": {
+    "model": "gpt-4o",
+    "messages": [
+      {
+        "role": "user",
+        "content": "start"
+      },
+      {
+        "role": "user",
+        "content": "mid notice"
+      },
+      {
+        "role": "user",
+        "content": "end"
+      }
+    ]
+  }
+}

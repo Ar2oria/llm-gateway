@@ -1,0 +1,14 @@
+.idea/
+__pycache__/
+.pytest_cache/
+.coverage
+.venv/
+config.local.json
+usage.db
+usage.db-wal
+usage.db-shm
+.DS_Store
+
+# Build artifacts
+dist/
+docs/superpowers

@@ -1,0 +1,88 @@
+{
+  "direction": "responses_to_anthropic_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_output_tokens": 500,
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "two things"
+      },
+      {
+        "type": "function_call",
+        "call_id": "call_A",
+        "name": "get_weather",
+        "arguments": "{}"
+      },
+      {
+        "type": "function_call",
+        "call_id": "call_B",
+        "name": "get_time",
+        "arguments": "{}"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_A",
+        "output": "18C"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_B",
+        "output": "12:00"
+      },
+      {
+        "type": "message",
+        "role": "user",
+        "content": "done"
+      }
+    ]
+  },
+  "name": "r2ar_parallel",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": "two things"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "call_A",
+            "name": "get_weather",
+            "input": {}
+          },
+          {
+            "type": "tool_use",
+            "id": "call_B",
+            "name": "get_time",
+            "input": {}
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "call_A",
+            "content": "18C"
+          },
+          {
+            "type": "tool_result",
+            "tool_use_id": "call_B",
+            "content": "12:00"
+          },
+          {
+            "text": "done",
+            "type": "text"
+          }
+        ]
+      }
+    ]
+  }
+}

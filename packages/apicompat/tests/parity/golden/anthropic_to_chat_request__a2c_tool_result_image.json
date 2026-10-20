@@ -1,0 +1,81 @@
+{
+  "direction": "anthropic_to_chat_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "toolu_01B",
+            "name": "run",
+            "input": {}
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_01B",
+            "content": [
+              {
+                "type": "text",
+                "text": "line1"
+              },
+              {
+                "type": "image",
+                "source": {
+                  "type": "base64",
+                  "media_type": "image/png",
+                  "data": "aGk="
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "name": "a2c_tool_result_image",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "toolu_01B",
+            "type": "function",
+            "function": {
+              "name": "run",
+              "arguments": "{}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "line1",
+        "tool_call_id": "toolu_01B"
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,aGk="
+            }
+          }
+        ]
+      }
+    ],
+    "max_completion_tokens": 500,
+    "parallel_tool_calls": true,
+    "reasoning_effort": "medium"
+  }
+}

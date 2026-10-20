@@ -1,0 +1,63 @@
+{
+  "direction": "responses_to_chat_request",
+  "input": {
+    "model": "gpt-4o",
+    "max_output_tokens": 500,
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Weather?"
+      },
+      {
+        "type": "function_call",
+        "call_id": "call_A",
+        "name": "get_weather",
+        "arguments": "{\"city\":\"Paris\"}"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_A",
+        "output": "18C"
+      },
+      {
+        "type": "message",
+        "role": "user",
+        "content": "thanks"
+      }
+    ]
+  },
+  "name": "r2cr_function_flow",
+  "output": {
+    "model": "gpt-4o",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather?"
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_A",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\":\"Paris\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "18C",
+        "tool_call_id": "call_A"
+      },
+      {
+        "role": "user",
+        "content": "thanks"
+      }
+    ],
+    "max_completion_tokens": 500
+  }
+}

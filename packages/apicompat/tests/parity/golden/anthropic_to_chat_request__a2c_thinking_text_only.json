@@ -1,0 +1,51 @@
+{
+  "direction": "anthropic_to_chat_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "plain thought"
+          },
+          {
+            "type": "text",
+            "text": "answer"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "go on"
+      }
+    ]
+  },
+  "name": "a2c_thinking_text_only",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      },
+      {
+        "role": "assistant",
+        "content": "answer"
+      },
+      {
+        "role": "user",
+        "content": "go on"
+      }
+    ],
+    "max_completion_tokens": 500,
+    "parallel_tool_calls": true,
+    "reasoning_effort": "medium"
+  }
+}

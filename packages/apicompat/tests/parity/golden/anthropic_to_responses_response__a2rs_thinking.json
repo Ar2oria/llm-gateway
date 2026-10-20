@@ -1,0 +1,64 @@
+{
+  "direction": "anthropic_to_responses_response",
+  "input": {
+    "id": "msg_2",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-4-5",
+    "content": [
+      {
+        "type": "thinking",
+        "thinking": "hmm",
+        "signature": "sig1"
+      },
+      {
+        "type": "text",
+        "text": "answer"
+      }
+    ],
+    "stop_reason": "end_turn",
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0
+    }
+  },
+  "name": "a2rs_thinking",
+  "output": {
+    "id": "msg_2",
+    "object": "response",
+    "created_at": 1792463212,
+    "model": "claude-sonnet-4-5",
+    "status": "completed",
+    "output": [
+      {
+        "type": "reasoning",
+        "id": "item_df2604fc0d1a820f538d25ba",
+        "summary": [
+          {
+            "type": "summary_text",
+            "text": "hmm"
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "id": "item_ccf356f2c3d4c7c06ce593bc",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "answer"
+          }
+        ],
+        "status": "completed"
+      }
+    ],
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "total_tokens": 15
+    }
+  }
+}

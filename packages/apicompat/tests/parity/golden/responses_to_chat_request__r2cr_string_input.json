@@ -1,0 +1,17 @@
+{
+  "direction": "responses_to_chat_request",
+  "input": {
+    "model": "gpt-4o",
+    "input": "hello"
+  },
+  "name": "r2cr_string_input",
+  "output": {
+    "model": "gpt-4o",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hello"
+      }
+    ]
+  }
+}

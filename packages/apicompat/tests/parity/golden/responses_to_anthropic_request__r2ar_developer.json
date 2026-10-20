@@ -1,0 +1,35 @@
+{
+  "direction": "responses_to_anthropic_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "input": [
+      {
+        "type": "message",
+        "role": "developer",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Dev rules."
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Hi"
+      }
+    ]
+  },
+  "name": "r2ar_developer",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 8192,
+    "system": "Dev rules.",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      }
+    ]
+  }
+}

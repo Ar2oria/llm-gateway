@@ -1,0 +1,53 @@
+{
+  "direction": "anthropic_to_responses_response",
+  "input": {
+    "id": "msg_4",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-4-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "hi"
+      }
+    ],
+    "stop_reason": "end_turn",
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 20,
+      "cache_creation_input_tokens": 10,
+      "cache_read_input_tokens": 40
+    }
+  },
+  "name": "a2rs_usage_cache",
+  "output": {
+    "id": "msg_4",
+    "object": "response",
+    "created_at": 1792463212,
+    "model": "claude-sonnet-4-5",
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "id": "item_91dc2ecfa60d1afa79c99b06",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "hi"
+          }
+        ],
+        "status": "completed"
+      }
+    ],
+    "usage": {
+      "input_tokens": 60,
+      "output_tokens": 20,
+      "total_tokens": 80,
+      "cache_creation_input_tokens": 10,
+      "input_tokens_details": {
+        "cached_tokens": 40
+      }
+    }
+  }
+}

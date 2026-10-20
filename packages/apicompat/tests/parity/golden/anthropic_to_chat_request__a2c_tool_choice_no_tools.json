@@ -1,0 +1,29 @@
+{
+  "direction": "anthropic_to_chat_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 500,
+    "tool_choice": {
+      "type": "auto"
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      }
+    ]
+  },
+  "name": "a2c_tool_choice_no_tools",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      }
+    ],
+    "max_completion_tokens": 500,
+    "parallel_tool_calls": true,
+    "reasoning_effort": "medium"
+  }
+}

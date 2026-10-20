@@ -1,0 +1,65 @@
+{
+  "direction": "anthropic_to_responses_response",
+  "input": {
+    "id": "msg_3",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-opus-5-5",
+    "content": [
+      {
+        "type": "thinking",
+        "thinking": "hmm",
+        "signature": "sig1"
+      },
+      {
+        "type": "text",
+        "text": "answer"
+      }
+    ],
+    "stop_reason": "end_turn",
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0
+    }
+  },
+  "name": "a2rs_thinking_55",
+  "output": {
+    "id": "msg_3",
+    "object": "response",
+    "created_at": 1792463212,
+    "model": "claude-opus-5-5",
+    "status": "completed",
+    "output": [
+      {
+        "type": "reasoning",
+        "id": "item_e31798ad2595f3958aa74e25",
+        "encrypted_content": "anthropic-thinking-v1:eyJ0eXBlIjoidGhpbmtpbmciLCJ0aGlua2luZyI6ImhtbSIsInNpZ25hdHVyZSI6InNpZzEifQ",
+        "summary": [
+          {
+            "type": "summary_text",
+            "text": "hmm"
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "id": "item_6968dc2fc73cbeaa37133370",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "answer"
+          }
+        ],
+        "status": "completed"
+      }
+    ],
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "total_tokens": 15
+    }
+  }
+}

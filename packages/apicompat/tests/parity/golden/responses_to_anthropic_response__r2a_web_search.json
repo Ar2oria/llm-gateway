@@ -1,0 +1,72 @@
+{
+  "client_model": "gpt-5",
+  "direction": "responses_to_anthropic_response",
+  "input": {
+    "id": "resp_8",
+    "object": "response",
+    "created_at": 1,
+    "model": "gpt-5",
+    "status": "completed",
+    "output": [
+      {
+        "type": "web_search_call",
+        "id": "ws_1",
+        "status": "completed",
+        "action": {
+          "type": "search",
+          "query": "weather paris"
+        }
+      },
+      {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "Sunny"
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "total_tokens": 15
+    }
+  },
+  "name": "r2a_web_search",
+  "output": {
+    "id": "resp_8",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "server_tool_use",
+        "id": "srvtoolu_ws_1",
+        "name": "web_search",
+        "input": {
+          "query": "weather paris"
+        }
+      },
+      {
+        "type": "web_search_tool_result",
+        "tool_use_id": "srvtoolu_ws_1",
+        "content": []
+      },
+      {
+        "text": "Sunny",
+        "type": "text"
+      }
+    ],
+    "model": "gpt-5",
+    "stop_reason": "end_turn",
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0
+    }
+  }
+}

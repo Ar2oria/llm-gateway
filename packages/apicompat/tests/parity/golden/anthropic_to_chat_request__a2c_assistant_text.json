@@ -1,0 +1,42 @@
+{
+  "direction": "anthropic_to_chat_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 100,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure."
+      },
+      {
+        "role": "user",
+        "content": "Thanks"
+      }
+    ]
+  },
+  "name": "a2c_assistant_text",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure."
+      },
+      {
+        "role": "user",
+        "content": "Thanks"
+      }
+    ],
+    "max_completion_tokens": 128,
+    "parallel_tool_calls": true,
+    "reasoning_effort": "medium"
+  }
+}

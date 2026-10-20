@@ -1,0 +1,18 @@
+{
+  "direction": "responses_to_anthropic_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "input": "hello"
+  },
+  "name": "r2ar_string_input",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 8192,
+    "messages": [
+      {
+        "role": "user",
+        "content": "hello"
+      }
+    ]
+  }
+}

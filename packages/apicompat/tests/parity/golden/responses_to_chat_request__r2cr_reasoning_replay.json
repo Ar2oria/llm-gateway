@@ -1,0 +1,71 @@
+{
+  "direction": "responses_to_chat_request",
+  "input": {
+    "model": "deepseek-v4",
+    "max_output_tokens": 500,
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Weather?"
+      },
+      {
+        "type": "reasoning",
+        "id": "rs_1",
+        "summary": [
+          {
+            "type": "summary_text",
+            "text": "must call tool"
+          }
+        ]
+      },
+      {
+        "type": "function_call",
+        "call_id": "call_A",
+        "name": "get_weather",
+        "arguments": "{}"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_A",
+        "output": "18C"
+      },
+      {
+        "type": "function_call",
+        "call_id": "call_B",
+        "name": "get_time",
+        "arguments": "{}"
+      }
+    ]
+  },
+  "name": "r2cr_reasoning_replay",
+  "output": {
+    "model": "deepseek-v4",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather?"
+      },
+      {
+        "role": "assistant",
+        "reasoning_content": "must call tool",
+        "tool_calls": [
+          {
+            "id": "call_A",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "18C",
+        "tool_call_id": "call_A"
+      }
+    ],
+    "max_completion_tokens": 500
+  }
+}

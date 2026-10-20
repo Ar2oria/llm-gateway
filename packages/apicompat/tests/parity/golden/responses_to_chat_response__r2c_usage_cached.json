@@ -1,0 +1,59 @@
+{
+  "client_model": "gpt-4o",
+  "direction": "responses_to_chat_response",
+  "input": {
+    "id": "resp_7",
+    "object": "response",
+    "created_at": 1,
+    "model": "m",
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "hi"
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "input_tokens": 100,
+      "output_tokens": 20,
+      "total_tokens": 120,
+      "cache_creation_input_tokens": 10,
+      "input_tokens_details": {
+        "cached_tokens": 40
+      }
+    }
+  },
+  "name": "r2c_usage_cached",
+  "output": {
+    "id": "resp_7",
+    "object": "chat.completion",
+    "created": 1792463212,
+    "model": "gpt-4o",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "hi"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 100,
+      "completion_tokens": 20,
+      "total_tokens": 120,
+      "prompt_tokens_details": {
+        "cached_tokens": 40,
+        "cache_creation_tokens": 10
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "direction": "anthropic_to_chat_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 100,
+    "system": [
+      {
+        "type": "text",
+        "text": "Part one."
+      },
+      {
+        "type": "text",
+        "text": "Part two."
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello"
+      }
+    ]
+  },
+  "name": "a2c_system_blocks",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Part one.\n\nPart two."
+      },
+      {
+        "role": "user",
+        "content": "Hello"
+      }
+    ],
+    "max_completion_tokens": 128,
+    "parallel_tool_calls": true,
+    "reasoning_effort": "medium"
+  }
+}

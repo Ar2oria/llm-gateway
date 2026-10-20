@@ -1,0 +1,138 @@
+{
+  "direction": "anthropic_stream_to_responses",
+  "inputs": [
+    {
+      "type": "message_start",
+      "message": {
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-sonnet-4-5",
+        "content": [],
+        "stop_reason": null,
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0
+        }
+      }
+    },
+    {
+      "type": "content_block_start",
+      "index": 0,
+      "content_block": {
+        "type": "tool_use",
+        "id": "toolu_01B",
+        "name": "run",
+        "input": {
+          "cmd": "ls"
+        }
+      }
+    },
+    {
+      "type": "content_block_stop",
+      "index": 0
+    },
+    {
+      "type": "message_delta",
+      "delta": {
+        "stop_reason": "tool_use"
+      },
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0
+      }
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "name": "as2rs_tool_seed",
+  "output": [
+    {
+      "type": "response.created",
+      "response": {
+        "id": "msg_1",
+        "object": "response",
+        "created_at": 1792463212,
+        "model": "claude-sonnet-4-5",
+        "status": "in_progress",
+        "output": []
+      },
+      "sequence_number": 0
+    },
+    {
+      "item": {
+        "arguments": "",
+        "call_id": "toolu_01B",
+        "id": "item_08930a25da2443b5179d26e0",
+        "name": "run",
+        "status": "in_progress",
+        "type": "function_call"
+      },
+      "output_index": 0,
+      "sequence_number": 1,
+      "type": "response.output_item.added"
+    },
+    {
+      "call_id": "toolu_01B",
+      "delta": "{\"cmd\":\"ls\"}",
+      "item_id": "item_08930a25da2443b5179d26e0",
+      "name": "run",
+      "output_index": 0,
+      "sequence_number": 2,
+      "type": "response.function_call_arguments.delta"
+    },
+    {
+      "arguments": "{\"cmd\":\"ls\"}",
+      "call_id": "toolu_01B",
+      "item_id": "item_08930a25da2443b5179d26e0",
+      "name": "run",
+      "output_index": 0,
+      "sequence_number": 3,
+      "type": "response.function_call_arguments.done"
+    },
+    {
+      "item": {
+        "arguments": "{\"cmd\":\"ls\"}",
+        "call_id": "toolu_01B",
+        "id": "item_08930a25da2443b5179d26e0",
+        "name": "run",
+        "status": "completed",
+        "type": "function_call"
+      },
+      "output_index": 0,
+      "sequence_number": 4,
+      "type": "response.output_item.done"
+    },
+    {
+      "type": "response.completed",
+      "response": {
+        "id": "msg_1",
+        "object": "response",
+        "created_at": 1792463212,
+        "model": "claude-sonnet-4-5",
+        "status": "completed",
+        "output": [
+          {
+            "type": "function_call",
+            "id": "item_08930a25da2443b5179d26e0",
+            "status": "completed",
+            "call_id": "toolu_01B",
+            "name": "run",
+            "arguments": "{\"cmd\":\"ls\"}"
+          }
+        ],
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 5,
+          "total_tokens": 15
+        }
+      },
+      "sequence_number": 5
+    }
+  ]
+}

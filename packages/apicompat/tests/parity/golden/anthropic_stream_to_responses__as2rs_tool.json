@@ -1,0 +1,161 @@
+{
+  "direction": "anthropic_stream_to_responses",
+  "inputs": [
+    {
+      "type": "message_start",
+      "message": {
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-sonnet-4-5",
+        "content": [],
+        "stop_reason": null,
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0
+        }
+      }
+    },
+    {
+      "type": "content_block_start",
+      "index": 0,
+      "content_block": {
+        "type": "tool_use",
+        "id": "toolu_01A",
+        "name": "get_weather",
+        "input": {}
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 0,
+      "delta": {
+        "type": "input_json_delta",
+        "partial_json": "{\"ci"
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 0,
+      "delta": {
+        "type": "input_json_delta",
+        "partial_json": "ty\":\"Paris\"}"
+      }
+    },
+    {
+      "type": "content_block_stop",
+      "index": 0
+    },
+    {
+      "type": "message_delta",
+      "delta": {
+        "stop_reason": "tool_use"
+      },
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0
+      }
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "name": "as2rs_tool",
+  "output": [
+    {
+      "type": "response.created",
+      "response": {
+        "id": "msg_1",
+        "object": "response",
+        "created_at": 1792463212,
+        "model": "claude-sonnet-4-5",
+        "status": "in_progress",
+        "output": []
+      },
+      "sequence_number": 0
+    },
+    {
+      "item": {
+        "arguments": "",
+        "call_id": "toolu_01A",
+        "id": "item_217d0a83b9cad8050b1a9d36",
+        "name": "get_weather",
+        "status": "in_progress",
+        "type": "function_call"
+      },
+      "output_index": 0,
+      "sequence_number": 1,
+      "type": "response.output_item.added"
+    },
+    {
+      "call_id": "toolu_01A",
+      "delta": "{\"ci",
+      "item_id": "item_217d0a83b9cad8050b1a9d36",
+      "name": "get_weather",
+      "output_index": 0,
+      "sequence_number": 2,
+      "type": "response.function_call_arguments.delta"
+    },
+    {
+      "call_id": "toolu_01A",
+      "delta": "ty\":\"Paris\"}",
+      "item_id": "item_217d0a83b9cad8050b1a9d36",
+      "name": "get_weather",
+      "output_index": 0,
+      "sequence_number": 3,
+      "type": "response.function_call_arguments.delta"
+    },
+    {
+      "arguments": "{\"city\":\"Paris\"}",
+      "call_id": "toolu_01A",
+      "item_id": "item_217d0a83b9cad8050b1a9d36",
+      "name": "get_weather",
+      "output_index": 0,
+      "sequence_number": 4,
+      "type": "response.function_call_arguments.done"
+    },
+    {
+      "item": {
+        "arguments": "{\"city\":\"Paris\"}",
+        "call_id": "toolu_01A",
+        "id": "item_217d0a83b9cad8050b1a9d36",
+        "name": "get_weather",
+        "status": "completed",
+        "type": "function_call"
+      },
+      "output_index": 0,
+      "sequence_number": 5,
+      "type": "response.output_item.done"
+    },
+    {
+      "type": "response.completed",
+      "response": {
+        "id": "msg_1",
+        "object": "response",
+        "created_at": 1792463212,
+        "model": "claude-sonnet-4-5",
+        "status": "completed",
+        "output": [
+          {
+            "type": "function_call",
+            "id": "item_217d0a83b9cad8050b1a9d36",
+            "status": "completed",
+            "call_id": "toolu_01A",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Paris\"}"
+          }
+        ],
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 5,
+          "total_tokens": 15
+        }
+      },
+      "sequence_number": 6
+    }
+  ]
+}

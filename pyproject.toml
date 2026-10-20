@@ -1,0 +1,32 @@
+[project]
+name = "llm-gateway"
+version = "0.1.0"
+description = "Local lightweight AI forwarding gateway"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29,<0.30",  # <0.30: PyCharm 2023.3 debugger's asyncio patch has no loop_factory
+    "httpx>=0.27",
+    "pydevd-pycharm>=233.15619.17",
+    "apicompat",
+]
+
+[project.optional-dependencies]
+menubar = [
+    "pyobjc-framework-Cocoa>=10.0",  # macOS-only: menu bar companion (gateway/menubar.py)
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+apicompat = { workspace = true }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests", "packages/apicompat/tests"]

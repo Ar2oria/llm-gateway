@@ -1,0 +1,31 @@
+{
+  "direction": "anthropic_to_chat_request",
+  "input": {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 100,
+    "system": "You are helpful.",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello"
+      }
+    ]
+  },
+  "name": "a2c_system",
+  "output": {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are helpful."
+      },
+      {
+        "role": "user",
+        "content": "Hello"
+      }
+    ],
+    "max_completion_tokens": 128,
+    "parallel_tool_calls": true,
+    "reasoning_effort": "medium"
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "direction": "chat_to_anthropic_stream",
+  "inputs": [
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant",
+            "content": ""
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant",
+            "tool_calls": [
+              {
+                "index": 0,
+                "id": "call_A",
+                "type": "function",
+                "function": {
+                  "name": "get_weather",
+                  "arguments": "{}"
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 1,
+                "id": "call_B",
+                "type": "function",
+                "function": {
+                  "name": "get_time",
+                  "arguments": "{\"tz\":\"UTC\"}"
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-1",
+      "object": "chat.completion.chunk",
+      "created": 1,
+      "model": "m",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {},
+          "finish_reason": "tool_calls"
+        }
+      ]
+    }
+  ],
+  "name": "c2as_parallel_tools",
+  "output": [
+    {
+      "type": "message_start",
+      "message": {
+        "id": "chatcmpl-1",
+        "type": "message",
+        "role": "assistant",
+        "content": [],
+        "model": "m",
+        "stop_reason": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0
+        }
+      }
+    },
+    {
+      "type": "content_block_start",
+      "index": 0,
+      "content_block": {
+        "type": "tool_use",
+        "id": "call_A",
+        "name": "get_weather",
+        "input": {}
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 0,
+      "delta": {
+        "type": "input_json_delta",
+        "partial_json": "{}"
+      }
+    },
+    {
+      "type": "content_block_stop",
+      "index": 0
+    },
+    {
+      "type": "content_block_start",
+      "index": 1,
+      "content_block": {
+        "type": "tool_use",
+        "id": "call_B",
+        "name": "get_time",
+        "input": {}
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 1,
+      "delta": {
+        "type": "input_json_delta",
+        "partial_json": "{\"tz\":\"UTC\"}"
+      }
+    }
+  ]
+}

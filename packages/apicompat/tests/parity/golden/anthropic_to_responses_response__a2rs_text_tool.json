@@ -1,0 +1,65 @@
+{
+  "direction": "anthropic_to_responses_response",
+  "input": {
+    "id": "msg_1",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-4-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "Checking."
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_01A",
+        "name": "get_weather",
+        "input": {
+          "city": "Paris"
+        }
+      }
+    ],
+    "stop_reason": "tool_use",
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0
+    }
+  },
+  "name": "a2rs_text_tool",
+  "output": {
+    "id": "msg_1",
+    "object": "response",
+    "created_at": 1792463212,
+    "model": "claude-sonnet-4-5",
+    "status": "completed",
+    "output": [
+      {
+        "type": "function_call",
+        "id": "item_4639668e6893faf1b808dfc3",
+        "status": "completed",
+        "call_id": "toolu_01A",
+        "name": "get_weather",
+        "arguments": "{\"city\":\"Paris\"}"
+      },
+      {
+        "type": "message",
+        "id": "item_4a103e3f4ecb42ebbbbc3479",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "Checking."
+          }
+        ],
+        "status": "completed"
+      }
+    ],
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "total_tokens": 15
+    }
+  }
+}
