@@ -728,14 +728,15 @@ class AnthropicMessagesEncoder:
             payload["output_config"] = {"effort": effort}
             if effort not in ( "low", "none" ):
                 payload["thinking"] = {
-                    "type": "enabled"
+                    "type": "enabled",
+                    "budget_tokens": _DEFAULT_THINKING_BUDGET.get(effort, 32768)
                 }
-                # claude 4-6 need set budget_tokens, but nobody will use it now
-                if model_lower.find("claude") != -1\
-                        and model_lower.find("5-5") != -1:
+                if model_lower.find("5-5") != -1:
                     payload["thinking"] = {
                         "type": "adaptive"
                     }
+            elif model_lower.find("claude") != -1:
+                payload["output_config"] = {"effort": "low"}
 
         # User ID in metadata
         if ir.user:
