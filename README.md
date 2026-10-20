@@ -103,6 +103,24 @@ claude --model claude-sonnet-5-5
 
 其他 OpenAI / Anthropic 兼容客户端同理：Base URL 填写 `http://127.0.0.1:8088`，API Key 填写 `apikey`，模型填写配置中的任意 `name`。
 
+### 接入 Codex
+
+Codex 使用 Responses API，Base URL 需要带上 `/v1`。在 `~/.codex/config.toml` 中配置：
+
+```toml
+model = "claude-sonnet-5-5"
+model_provider = "gateway"
+
+[model_providers.gateway]
+name = "LLM Gateway"
+base_url = "http://127.0.0.1:8088/v1"
+wire_api = "responses"
+requires_openai_auth = false
+experimental_bearer_token = "apikey"
+```
+
+`apikey` 同样是 `server.api_key` 的哨兵值。Codex 固定发送 Responses 协议，网关会按模型的 `protocol` 配置自动转换到对应上游协议（Anthropic / OpenAI Chat）。
+
 ## 管理界面
 
 浏览器打开 `http://127.0.0.1:8088/admin`

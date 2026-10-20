@@ -110,6 +110,27 @@ claude --model claude-sonnet-5-5
 Any OpenAI- or Anthropic-compatible client works the same way: base URL
 `http://127.0.0.1:8088`, API key `apikey`, model = any configured `name`.
 
+### Codex
+
+Codex speaks the Responses API, so its base URL includes `/v1`. Configure
+`~/.codex/config.toml`:
+
+```toml
+model = "claude-sonnet-5-5"
+model_provider = "gateway"
+
+[model_providers.gateway]
+name = "LLM Gateway"
+base_url = "http://127.0.0.1:8088/v1"
+wire_api = "responses"
+requires_openai_auth = false
+experimental_bearer_token = "apikey"
+```
+
+`apikey` is again the `server.api_key` sentinel. Codex always sends Responses
+requests; the gateway converts them to the model's configured upstream
+protocol (Anthropic / OpenAI Chat) as needed.
+
 ## Admin UI
 
 Open `http://127.0.0.1:8088/admin` to manage endpoints and models and to view
