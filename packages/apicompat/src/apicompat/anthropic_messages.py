@@ -7,6 +7,7 @@ Converts between Anthropic Messages API format and the Intermediate Representati
 import copy
 import json
 from typing import Any, Dict, List, Optional, Tuple, Union
+import re
 
 from .ir import (
     ImageSourceType,
@@ -728,8 +729,7 @@ class AnthropicMessagesEncoder:
             payload["output_config"] = {"effort": effort}
             if effort not in ( "low", "none" ):
                 payload["thinking"] = {
-                    "type": "enabled",
-                    "budget_tokens": _DEFAULT_THINKING_BUDGET.get(effort, 32768)
+                    "type": "enabled"
                 }
                 if model_lower.find("5-5") != -1:
                     payload["thinking"] = {
