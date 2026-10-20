@@ -893,6 +893,9 @@ class OpenAIChatEncoder:
         # Stream
         if ir.stream:
             payload["stream"] = True
+            payload["stream_options"] = {
+                "include_usage": True
+            }
 
         # Reasoning effort (from Anthropic output_config.effort / thinking;
         # sub2api always resolves one for Anthropic sources).
@@ -936,10 +939,6 @@ class OpenAIChatEncoder:
             payload["response_format"] = self._encode_response_format(
                 ir.response_format
             )
-
-        payload["stream_options"] = {
-            "include_usage": True
-        }
 
         return payload
 

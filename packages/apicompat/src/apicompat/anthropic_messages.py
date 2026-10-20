@@ -673,6 +673,7 @@ class AnthropicMessagesEncoder:
     ) -> Dict[str, Any]:
         """Encode IR request to Anthropic Messages format."""
         options = options or {}
+        model_lower = ir.model.lower()
 
         # Anthropic requires max_tokens; default like sub2api rather than
         # failing the whole conversion.
@@ -721,6 +722,7 @@ class AnthropicMessagesEncoder:
         # Responses→Anthropic bridge. xhigh maps back to Claude's "max".
         if ir.thinking and ir.thinking.effort:
             effort = ir.thinking.effort
+            effort = _CLAMPED_EFFORT.get(effort, effort)
             if effort == "xhigh":
                 effort = "max"
             payload["output_config"] = {"effort": effort}
@@ -729,6 +731,11 @@ class AnthropicMessagesEncoder:
                     "type": "enabled"
                 }
                 # claude 4-6 need set budget_tokens, but nobody will use it now
+                if model_lower.find("claude") != -1\
+                        and model_lower.find("5-5") != -1:
+                    payload["thinking"] = {
+                        "type": "adaptive"
+                    }
 
         # User ID in metadata
         if ir.user:
