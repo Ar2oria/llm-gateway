@@ -1338,6 +1338,17 @@ def test_detect_format():
     assert detect_format("/v1/responses") == "responses"
 
 
+def test_detect_format_accepts_trailing_slash_and_prefix():
+    assert detect_format("/v1/messages/") == "anthropic"
+    assert detect_format("/anthropic/v1/messages") == "anthropic"
+    assert detect_format("/proxy/anthropic/v1/messages/") == "anthropic"
+    assert detect_format("/v1/responses/") == "responses"
+    assert detect_format("/openai/v1/responses") == "responses"
+    # Suffix matching must not turn lookalike paths into protocol routes.
+    assert detect_format("/v1/messages-extra") == "openai"
+    assert detect_format("/v1/responses-extra") == "openai"
+
+
 def test_router_exact_match():
     router = ModelRouter(make_config())
     ep = router.route("gpt-4o")

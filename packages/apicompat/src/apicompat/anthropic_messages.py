@@ -43,6 +43,7 @@ _TOP_LEVEL_COMBINATORS = ("anyOf", "oneOf", "allOf")
 #: wide end to the largest value the upstream domain knows.
 _CLAMPED_EFFORT = {
     "max": "xhigh",
+    "adaptive": "xhigh",
 }
 
 #: Placeholder signature for thinking blocks synthesized from plaintext
@@ -189,6 +190,7 @@ class AnthropicMessagesDecoder:
                 ir.thinking.effort = _CLAMPED_EFFORT.get(
                     str(output_config["effort"]), str(output_config["effort"])
                 )
+
         # sub2api semantics: Anthropic sources always resolve to an effort
         # ("none" when thinking is explicitly disabled, else output_config's
         # value or "medium") so downstream protocol fields (Responses
@@ -722,11 +724,11 @@ class AnthropicMessagesEncoder:
             if effort == "xhigh":
                 effort = "max"
             payload["output_config"] = {"effort": effort}
-            if effort != "low":
+            if effort not in ( "low", "none" ):
                 payload["thinking"] = {
-                    "type": "enabled",
-                    "budget_tokens": _DEFAULT_THINKING_BUDGET.get(effort, 10240),
+                    "type": "enabled"
                 }
+                # claude 4-6 need set budget_tokens, but nobody will use it now
 
         # User ID in metadata
         if ir.user:

@@ -27,10 +27,16 @@ PROTOCOL_VALUES: list[str] = [e.value for e in Protocol]
 
 
 def detect_format(path: str) -> str:
-    """Classify a request path as anthropic / responses / openai."""
-    if path == ANTHROPIC_PATH:
+    """Classify a request path as anthropic / responses / openai.
+
+    Match the protocol suffix rather than requiring an exact path: gateways
+    are often mounted behind a prefix (e.g. ``/anthropic/v1/messages``), and
+    clients may include a trailing slash.
+    """
+    normalized = path.rstrip("/") or "/"
+    if normalized.endswith(ANTHROPIC_PATH):
         return "anthropic"
-    if path == RESPONSES_PATH:
+    if normalized.endswith(RESPONSES_PATH):
         return "responses"
     return "openai"
 

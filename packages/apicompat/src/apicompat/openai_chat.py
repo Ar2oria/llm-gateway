@@ -937,6 +937,10 @@ class OpenAIChatEncoder:
                 ir.response_format
             )
 
+        payload["stream_options"] = {
+            "include_usage": True
+        }
+
         return payload
 
     def _encode_messages(

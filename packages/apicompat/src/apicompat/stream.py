@@ -16,6 +16,7 @@ All of them share :class:`StreamCodec`, so the semantics are identical.
 
 from __future__ import annotations
 
+import logging
 from typing import AsyncIterable, AsyncIterator, Iterable, Iterator
 
 from .converters import _DECODER_CLASSES, _ENCODER_CLASSES
@@ -34,6 +35,8 @@ ENCODE_OPTIONS = {
     # contract (sub2api's IncludeUsage) puts it on the final chunk.
     "include_usage": True,
 }
+
+logger = logging.getLogger(__name__)
 
 
 def _as_protocol(value: Protocol | str) -> Protocol:
@@ -115,15 +118,20 @@ class StreamCodec:
         self._finished = True
         out: list[bytes] = []
 
-        # Flush an unterminated trailing event. Invalid input is skipped
-        # rather than aborting the stream (matches the gateway's behaviour).
-        for line in self._pending_event_lines:
-            if line.startswith("data: "):
-                try:
-                    self._emit_ir_events(self._decoder.decode_stream_event(line), out)
-                except Exception:
-                    pass
-        self._pending_event_lines = []
+        # A stream may end without a trailing newline. Flush the residual
+        # line first so its event is not dropped.
+        if self._buf:
+            line = self._buf.decode("utf-8", errors="replace")
+            self._buf = b""
+            self._consume_line(line, out)
+
+        # Normally a data: line has already consumed its event: metadata.
+        # This handles a stream that ended immediately after an event: line.
+        if self._pending_event_lines:
+            event_text = "\n".join(self._pending_event_lines)
+            self._pending_event_lines = []
+            if any(line.startswith("data:") for line in event_text.splitlines()):
+                self._decode_and_emit(event_text, out)
 
         # Synthesize a clean termination when the upstream just stopped.
         if not self._saw_termination:
@@ -131,8 +139,11 @@ class StreamCodec:
             if finalize is not None:
                 try:
                     self._emit_ir_events(finalize(), out)
-                except Exception:  # pragma: no cover - defensive, mirrors gateway
-                    pass
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.warning(
+                        "Failed to finalize SSE stream conversion (%s): %s",
+                        type(exc).__name__, exc,
+                    )
         return out
 
     def convert_event(self, event_text: str) -> list[bytes]:
@@ -148,36 +159,54 @@ class StreamCodec:
     # -- internals -----------------------------------------------------
 
     def _consume_line(self, line: str, out: list[bytes]) -> None:
+        # SSE allows CRLF line endings; the trailing CR is part of the line
+        # terminator, not the field value.
+        if line.endswith("\r"):
+            line = line[:-1]
         if not line.strip():
             return
         if line.startswith("event:"):
-            # The data line follows; keep the type for the decoder.
-            self._pending_event_lines.append(line)
+            # The decoders expect the conventional "event: value" form.  A
+            # stream may legally omit the optional space after the colon.
+            self._pending_event_lines.append("event: " + line[6:].lstrip())
             return
-        if not line.startswith("data: "):
+        if not line.startswith("data:"):
             return
 
-        data = line[6:]
-        if data == "[DONE]":
-            # Chat clients terminate with [DONE] themselves; every other
-            # target needs the decoder to produce its terminal event.
+        # SSE permits "data:value" as well as "data: value" (the space is
+        # optional).  Normalize to the form the protocol decoders expect.
+        data = line[5:]
+        if data.startswith(" "):
+            data = data[1:]
+        if data.strip() == "[DONE]":
+            data = "[DONE]"
             if self.target == Protocol.OPENAI_CHAT:
                 self._saw_termination = True
                 out.append(b"data: [DONE]\n\n")
-            else:
-                self._decode_and_emit("data: [DONE]", out)
-            self._pending_event_lines = []
-            return
+                self._pending_event_lines = []
+                return
 
-        event_text = "\n".join(self._pending_event_lines + [line])
+        normalized_line = "data: " + data
+        event_text = "\n".join(self._pending_event_lines + [normalized_line])
         self._pending_event_lines = []
-        self._decode_and_emit(event_text, out)
+        if data == "[DONE]":
+            # Chat clients terminate with [DONE] themselves; every other
+            # target needs the decoder to produce its terminal event.
+            self._decode_and_emit("data: [DONE]", out)
+        else:
+            self._decode_and_emit(event_text, out)
 
     def _decode_and_emit(self, event_text: str, out: list[bytes]) -> None:
         try:
             ir_events = self._decoder.decode_stream_event(event_text)
-        except Exception:
-            # A malformed event is skipped rather than aborting the stream.
+        except Exception as exc:
+            # A malformed event is skipped rather than aborting the stream,
+            # but it must not disappear silently.
+            logger.warning(
+                "Failed to convert SSE event (%s): %s",
+                type(exc).__name__, exc,
+            )
+            logger.debug("Failed SSE event payload: %r", event_text)
             return
         self._emit_ir_events(ir_events, out)
 

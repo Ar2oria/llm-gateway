@@ -1,6 +1,7 @@
 """Tests for the byte-level stream API (convert_stream / astream / StreamCodec)."""
 
 import asyncio
+import logging
 
 import pytest
 
@@ -117,6 +118,69 @@ def test_stream_codec_ignores_malformed_events():
     # A later valid event still converts.
     out = codec.feed(RESPONSES_STREAM[0])
     assert b"message_start" in b"".join(out)
+
+
+def test_stream_codec_flushes_final_event_without_newline():
+    """A stream may end after the last event without a trailing newline."""
+    codec = StreamCodec("openai_responses", "anthropic_messages")
+    out = codec.feed(RESPONSES_STREAM[0])
+    out.extend(codec.feed(RESPONSES_STREAM[1]))
+    # The final delta event has no terminating newline.
+    out.extend(codec.feed(RESPONSES_STREAM[2].rstrip(b"\n")))
+    out.extend(codec.finalize())
+    joined = b"".join(out)
+    assert b'"text": "hello"' in joined
+    assert b"event: message_stop" in joined
+
+
+def test_stream_codec_accepts_data_without_optional_space():
+    """SSE permits ``data:value``; the decoders expect ``data: value``."""
+    codec = StreamCodec("openai_responses", "anthropic_messages")
+    out = codec.feed(
+        b'data:{"type":"response.output_text.delta","delta":"hi"}\n\n'
+    )
+    out.extend(codec.finalize())
+    assert b'"text": "hi"' in b"".join(out)
+
+
+def test_stream_codec_logs_conversion_errors(caplog, monkeypatch):
+    codec = StreamCodec("openai_responses", "anthropic_messages")
+
+    def boom(_event):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(codec._decoder, "decode_stream_event", boom)
+    with caplog.at_level(logging.WARNING, logger="apicompat.stream"):
+        assert codec.feed(b'data: {"type":"response.created"}\n\n') == []
+    assert "Failed to convert SSE event" in caplog.text
+    assert "boom" in caplog.text
+
+
+# Same compact SSE shape used by sub2api's
+# TestHandleCCStreamingFromAnthropic_CompactSSEFormat: both "event:" and
+# "data:" omit the optional space, and the final event has no trailing newline.
+SUB2API_COMPACT_ANTHROPIC_STREAM = "\n".join([
+    'event:message_start',
+    'data:{"type":"message_start","message":{"id":"msg_c2","type":"message","role":"assistant","content":[],"model":"k3","stop_reason":"","usage":{"input_tokens":21,"cache_read_input_tokens":6,"cache_creation_input_tokens":1}}}',
+    '',
+    'event:content_block_start',
+    'data:{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"OK"}}',
+    '',
+    'event:message_delta',
+    'data:{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}',
+    '',
+    'event:message_stop',
+    'data:{"type":"message_stop"}',
+]).encode()
+
+
+def test_stream_codec_accepts_sub2api_compact_sse_case():
+    codec = StreamCodec("anthropic_messages", "openai_chat")
+    out = codec.feed(SUB2API_COMPACT_ANTHROPIC_STREAM)
+    out.extend(codec.finalize())
+    joined = b"".join(out)
+    assert b'"completion_tokens": 4' in joined
+    assert b"[DONE]" in joined
 
 
 def test_astream_matches_sync_output():
