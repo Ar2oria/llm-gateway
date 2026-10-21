@@ -74,6 +74,14 @@ eq("by protocol desc: missing first, protocols reverse",
      sortModelRows(rows, "upstream_model", "desc").map(r => r.model.name), ["a", "b", "c"]);
 }
 
+// --- sort by system_prompt: an injected template name wins over the
+// handwritten prompt, mirroring what the column renders ---
+eq("system_prompt column sorts by template name first",
+   sortModelRows([
+     { model: { name: "a", prompt_template: "zzz", system_prompt: null }, baseUrl: "x" },
+     { model: { name: "b", prompt_template: null, system_prompt: "aaa" }, baseUrl: "x" },
+   ], "system_prompt", "asc").map(r => r.model.name), ["b", "a"]);
+
 // --- secondary sort key: model name, always ascending (统一), regardless of
 // primary key/direction and regardless of original order (explicit tiebreak,
 // stronger than Array.sort stability) ---

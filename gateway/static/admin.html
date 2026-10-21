@@ -317,7 +317,7 @@ function renderModels(content) {
     upTd.textContent = model.upstream_model || "—";
     const sysTd = document.createElement("td");
     sysTd.className = "code";
-    sysTd.textContent = model.system_prompt || "—";
+    sysTd.textContent = modelPromptCellText(model);
     const protoTd = document.createElement("td");
     protoTd.className = "code";
     protoTd.textContent = model.protocol || "—";
@@ -326,6 +326,7 @@ function renderModels(content) {
     ops.className = "actions";
     // 编辑入口保留在「接入点」卡片展开视图；模型页提供复制curl
     ops.appendChild(actionBtn("复制curl", () => copyModelCurl(model)));
+    ops.appendChild(actionBtn(promptButtonLabel(model), () => togglePromptTemplate(baseUrl, model)));
     ops.appendChild(actionBtn("删除", () => {
       confirmDialog("确定删除该模型？").then(ok => { if (ok) deleteModel(baseUrl, model.name); });
     }, "danger"));
@@ -442,7 +443,7 @@ function renderEndpoint(ep) {
         upTd.textContent = m.upstream_model || "—";
         const sysTd = document.createElement("td");
         sysTd.className = "code";
-        sysTd.textContent = m.system_prompt || "—";
+        sysTd.textContent = modelPromptCellText(m);
         const protoTd = document.createElement("td");
         protoTd.className = "code";
         protoTd.textContent = m.protocol || "—";
@@ -450,6 +451,7 @@ function renderEndpoint(ep) {
         const ops = document.createElement("span");
         ops.className = "actions";
         ops.appendChild(actionBtn("编辑", () => openModelModal(ep.base_url, m)));
+        ops.appendChild(actionBtn(promptButtonLabel(m), () => togglePromptTemplate(ep.base_url, m)));
         ops.appendChild(actionBtn("删除", () => {
           confirmDialog("确定删除该模型？").then(ok => { if (ok) deleteModel(ep.base_url, m.name); });
         }, "danger"));
@@ -596,6 +598,9 @@ function openEndpointModal(ep) {
 
 function openModelModal(baseUrl, model) {
   const isEdit = !!model;
+  // 已注入模板时系统提示词只读（展示模板名，保存时不带 system_prompt 键，
+  // 后端把「缺键」视为保留原手写提示词）
+  const injected = isEdit && !!model.prompt_template;
   const pricing = isEdit ? (model.pricing || {}) : {};
   const curProtocol = isEdit ? (model.protocol || "") : "";
   const protocolOptions = [
@@ -614,8 +619,10 @@ function openModelModal(baseUrl, model) {
     '<input type="text" id="m-upstream" value="' + escapeAttr(isEdit ? (model.upstream_model || "") : "") + '" placeholder="可选">' +
     '<label>协议</label>' +
     '<select id="m-protocol">' + protocolOptions + '</select>' +
-    '<label>系统提示词</label>' +
-    '<textarea id="m-system">' + escapeHtml(isEdit ? (model.system_prompt || "") : "") + '</textarea>' +
+    '<label>系统提示词' + (injected ? '（模板：' + escapeHtml(model.prompt_template) + '）' : '') + '</label>' +
+    '<textarea id="m-system"' + (injected ? ' disabled' : '') + '>' +
+      escapeHtml(injected ? model.prompt_template : (isEdit ? (model.system_prompt || "") : "")) +
+    '</textarea>' +
     '<label>输入价格（$/1M tokens，可留空）</label>' +
     '<input type="text" id="m-price-input" placeholder="如 3" value="' + escapeAttr(pricing.input ?? "") + '">' +
     '<label>缓存读价格</label>' +
@@ -641,9 +648,10 @@ function openModelModal(baseUrl, model) {
     const payload = {
       upstream_model: document.getElementById("m-upstream").value.trim() || null,
       protocol: document.getElementById("m-protocol").value || null,
-      system_prompt: document.getElementById("m-system").value.trim() || null,
       pricing: Object.keys(pricing).length ? pricing : null,
     };
+    // 注入中不发 system_prompt：后端以「键缺失」表示保留原手写提示词
+    if (!injected) payload.system_prompt = document.getElementById("m-system").value.trim() || null;
     try {
       if (isEdit) {
         await api("PUT", "/admin/api/endpoints/models?base_url=" + encodeURIComponent(baseUrl)
@@ -660,6 +668,70 @@ function openModelModal(baseUrl, model) {
       await loadEndpoints();
     } catch (err) {
       toast(err.message, "error");
+    }
+  });
+}
+
+// —— 提示词模板注入：把一个模板文件的内容作为该模型的系统提示词注入上游 ——
+async function togglePromptTemplate(baseUrl, model) {
+  if (model.prompt_template) {
+    const ok = await confirmDialog("确定取消注入「" + model.prompt_template + "」？");
+    if (!ok) return;
+    try {
+      await api("DELETE", "/admin/api/endpoints/models/prompt-template?base_url=" +
+                encodeURIComponent(baseUrl) + "&name=" + encodeURIComponent(model.name));
+      toast("已取消注入", "success");
+      await loadEndpoints();
+    } catch (err) { toast(err.message, "error"); }
+    return;
+  }
+  openInjectPromptModal(baseUrl, model);
+}
+
+async function openInjectPromptModal(baseUrl, model) {
+  let templates = [];
+  try {
+    templates = (await api("GET", "/admin/api/prompt-templates")).templates || [];
+  } catch (err) { toast(err.message, "error"); return; }
+  if (templates.length === 0) {
+    showModal('<h2>注入提示词</h2><p class="empty">prompts/ 下暂无模板</p>' +
+              '<div class="modal-actions"><button id="modal-cancel">关闭</button></div>');
+    document.getElementById("modal-cancel").addEventListener("click", closeModal);
+    return;
+  }
+  showModal(
+    '<h2>注入提示词 · ' + escapeHtml(model.name) + '</h2>' +
+    '<label>提示词模板</label>' +
+    '<select id="pt-select">' +
+    templates.map(t => '<option value="' + escapeAttr(t) + '">' + escapeHtml(t) + '</option>').join("") +
+    '</select>' +
+    '<div id="pt-status" class="empty"></div>' +
+    '<div class="modal-actions">' +
+    '  <button id="modal-cancel">取消</button>' +
+    '  <button id="modal-save" class="primary">确定</button>' +
+    '</div>');
+  document.getElementById("modal-cancel").addEventListener("click", closeModal);
+  document.getElementById("modal-save").addEventListener("click", async () => {
+    const status = document.getElementById("pt-status");
+    const save = document.getElementById("modal-save");
+    save.disabled = true;
+    document.getElementById("modal-cancel").disabled = true;
+    status.style.color = "";
+    status.textContent = "正在注入…";
+    try {
+      await api("POST", "/admin/api/endpoints/models/prompt-template", {
+        base_url: baseUrl, name: model.name,
+        template: document.getElementById("pt-select").value,
+      });
+      status.textContent = "完成";
+      await loadEndpoints();
+      setTimeout(closeModal, 400);
+    } catch (err) {
+      status.style.color = "var(--danger)";
+      status.textContent = err.message;
+      save.disabled = false;
+      document.getElementById("modal-cancel").disabled = false;
+      await loadEndpoints();     // 失败会清 prompt_template，刷新以同步按钮状态
     }
   });
 }
@@ -1126,6 +1198,17 @@ function totalTokensOf(t) {
   return (t.input || 0) + (t.cache_read || 0) + (t.cache_write || 0) + (t.output || 0);
 }
 
+// PROMPTS-START
+// 模型行「系统提示词」列与注入按钮文案：模板名优先（模板生效时展示模板名）。
+// Tested by tests/prompt_template_test.mjs.
+function modelPromptCellText(model) {
+  return model.prompt_template || model.system_prompt || "—";
+}
+function promptButtonLabel(model) {
+  return model.prompt_template ? "取消注入" : "注入提示词";
+}
+// PROMPTS-END
+
 // MODELS-SORT-START
 // Sorting for the models tab (click a table header to sort). Pure functions:
 // return NEW values, inputs untouched. Missing values (null protocol /
@@ -1139,6 +1222,7 @@ const MODEL_SORT_KEYS = new Set(["name", "endpoint", "upstream_model", "system_p
 
 function _modelSortValue(row, key) {
   if (key === "endpoint") return row.baseUrl;
+  if (key === "system_prompt") return row.model.prompt_template || row.model.system_prompt;
   return row.model[key];
 }
 

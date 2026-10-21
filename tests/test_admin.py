@@ -71,6 +71,16 @@ def test_admin_page_has_copy_curl_wiring(tmp_path):
     assert 'actionBtn("编辑", () => openModelModal(ep.base_url, m))' in html
 
 
+def test_admin_page_wires_prompt_template_ui(tmp_path):
+    # 模型页/接入点卡片展开表的「注入提示词」按钮与只读文本域（纯函数由 tests/prompt_template_test.mjs 覆盖）
+    client, _ = make_app(tmp_path)
+    html = client.get("/admin").text
+    assert "/admin/api/prompt-templates" in html
+    assert "/admin/api/endpoints/models/prompt-template" in html
+    assert "promptButtonLabel" in html
+    assert "modelPromptCellText" in html
+
+
 def test_admin_page_persists_tab_in_url_hash(tmp_path):
     # 切换标签页后刷新仍停留在当前标签页：hash 写入 + 恢复（纯解析函数由 tests/tab_test.mjs 覆盖）
     client, _ = make_app(tmp_path)
