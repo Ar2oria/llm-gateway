@@ -1,4 +1,5 @@
 import pathlib
+import shutil
 import subprocess
 
 import pytest
@@ -21,9 +22,18 @@ def make_root(tmp_path):
     return root
 
 
-def test_list_templates_only_dirs_with_prompt_md(tmp_path):
+def test_list_templates_lists_every_subdirectory(tmp_path):
+    # 模板目录是否可用与目录里有没有文件无关：名字存在就要能在注入弹窗里选到。
+    # 只有 prompt.py（重启后靠钩子重建正文）或暂时为空的目录同样要出现。
     store = PromptTemplateStore(make_root(tmp_path))
-    assert store.list_templates() == ["alpha", "beta"]
+    assert store.list_templates() == ["alpha", "beta", "no-md"]
+
+
+def test_list_templates_lists_directory_without_any_files(tmp_path):
+    # 规则 1：只看目录名。空目录（还没生成 prompt.md）也要列出来。
+    root = make_root(tmp_path)
+    (root / "empty").mkdir()
+    assert "empty" in PromptTemplateStore(root).list_templates()
 
 
 def test_list_templates_missing_root_is_empty(tmp_path):
@@ -112,6 +122,106 @@ def test_preload_reports_whether_prompt_is_available(tmp_path):
     store = PromptTemplateStore(root)
     assert store.preload("alpha") is True
     assert store.preload("no-md") is False
+
+# --- md-only / py-only 模板 ---
+
+def _py_only_template(tmp_path, body, name="tpl"):
+    root = tmp_path / "prompts"
+    d = root / name
+    d.mkdir(parents=True)
+    (d / "prompt.py").write_text(body, encoding="utf-8")
+    return root
+
+
+def _writes_md(body: str) -> str:
+    return (
+        "import pathlib\n"
+        "def load_prompt():\n"
+        "    pathlib.Path('prompt.md').write_text(%r, encoding='utf-8')\n"
+        "    return 0\n" % body
+    )
+
+
+def test_get_prompt_md_only_reads_without_running_hook(tmp_path, monkeypatch):
+    # 只有 prompt.md：直接用正文，不该起子进程。
+    _forbid_spawn(monkeypatch)
+    root = make_root(tmp_path)
+    assert PromptTemplateStore(root).get_prompt("alpha") == "ALPHA"
+
+
+def test_get_prompt_py_only_runs_hook_then_loads_generated_md(tmp_path):
+    # 只有 prompt.py：首次取正文时执行 load_prompt()，再读它生成的 prompt.md。
+    root = _py_only_template(tmp_path, _writes_md("GENERATED"))
+    store = PromptTemplateStore(root)
+    assert store.get_prompt("tpl") == "GENERATED"
+    assert (root / "tpl" / "prompt.md").read_text(encoding="utf-8") == "GENERATED"
+
+
+def test_get_prompt_py_only_runs_hook_once_then_caches(tmp_path, monkeypatch):
+    root = _py_only_template(
+        tmp_path,
+        "import pathlib\n"
+        "def load_prompt():\n"
+        "    p = pathlib.Path('runs.txt')\n"
+        "    n = int(p.read_text()) if p.exists() else 0\n"
+        "    p.write_text(str(n + 1))\n"
+        "    pathlib.Path('prompt.md').write_text('GENERATED', encoding='utf-8')\n"
+        "    return 0\n")
+    store = PromptTemplateStore(root)
+    assert store.get_prompt("tpl") == "GENERATED"
+    assert store.get_prompt("tpl") == "GENERATED"
+    assert (root / "tpl" / "runs.txt").read_text() == "1"
+
+
+def test_get_prompt_hook_failure_is_negative_and_does_not_raise(tmp_path):
+    # 钩子失败不能让请求路径 500：按“模板不可用”处理（回落手写提示词）。
+    root = _py_only_template(
+        tmp_path,
+        "import pathlib\ndef load_prompt():\n"
+        "    pathlib.Path('ran.txt').write_text('x')\n"
+        "    return 5\n")
+    assert PromptTemplateStore(root).get_prompt("tpl") is None
+    assert (root / "tpl" / "ran.txt").exists()      # 确认真的走到了钩子
+
+
+def test_get_prompt_hook_succeeds_without_writing_md_is_none(tmp_path):
+    # 契约：钩子跑成功但目录里仍没有 prompt.md → 不注入（回落手写提示词）。
+    root = _py_only_template(
+        tmp_path,
+        "import pathlib\ndef load_prompt():\n"
+        "    pathlib.Path('ran.txt').write_text('x')\n"
+        "    return 0\n")
+    assert PromptTemplateStore(root).get_prompt("tpl") is None
+    assert (root / "tpl" / "ran.txt").exists()
+
+
+def test_md_present_skips_hook(tmp_path, monkeypatch):
+    # 两个文件都在时以 md 为准，不执行钩子（避免每次首用都起子进程）。
+    _forbid_spawn(monkeypatch)
+    root = make_root(tmp_path)
+    (root / "alpha" / "prompt.py").write_text("def load_prompt():\n    return 0\n",
+                                              encoding="utf-8")
+    assert PromptTemplateStore(root).get_prompt("alpha") == "ALPHA"
+
+
+def test_hook_works_with_relative_root(tmp_path, monkeypatch):
+    # root 是相对路径时，runner 的 cwd 是模板目录，脚本路径若不再解析一次就会
+    # 变成 templates/tpl/templates/tpl/prompt.py（生产用绝对路径，但调用方和
+    # 测试都可能传相对路径）。
+    root = _py_only_template(tmp_path, _writes_md("REL"))
+    monkeypatch.chdir(tmp_path)
+    store = PromptTemplateStore("prompts")
+    assert store.get_prompt("tpl") == "REL"
+
+
+def test_preload_refreshes_previously_cached_body(tmp_path):
+    # 注入时（规则 2A）必须重新载入正文：钩子改了 prompt.md 不能被旧缓存盖住。
+    root = make_root(tmp_path)
+    store = PromptTemplateStore(root)
+    assert store.get_prompt("alpha") == "ALPHA"
+    (root / "alpha" / "prompt.md").write_text("REWRITTEN", encoding="utf-8")
+    assert store.preload("alpha") is True
+    assert store.get_prompt("alpha") == "REWRITTEN"
 
 
 def _template_with_py(tmp_path, body):
@@ -279,3 +389,34 @@ def test_hook_broken_symlink_raises(tmp_path, monkeypatch):
     (root / "tpl" / "prompt.py").symlink_to(root / "tpl" / "missing.py")
     with pytest.raises(HookError, match="普通文件"):
         PromptTemplateStore(root).run_load_hook("tpl")
+
+
+# --- 仓库里真实模板的回归保护 ---
+
+SHIPPED_DS_PURGE = pathlib.Path(__file__).resolve().parents[1] / "prompts" / "ds-purge"
+
+
+def test_shipped_ds_purge_template_regenerates_md_under_runner(tmp_path):
+    """ds-purge 只有 prompt.py（正文是内嵌 base64），必须能被网关跑通。
+
+    顶层 ``sys.exit()`` / ``raise SystemExit`` 会让 runner 打印不出结果标记，
+    网关只报「输出无法解析」而退出码仍是 0 —— 这种回归极难从日志看出来，
+    所以在这里锁死：删掉 prompt.md 后跑一次，正文必须重新生成出来。
+    """
+    if not (SHIPPED_DS_PURGE / "prompt.py").is_file():
+        pytest.skip("ds-purge template not present")
+
+    root = tmp_path / "prompts"
+    folder = root / "ds-purge"
+    folder.mkdir(parents=True)
+    shutil.copy(SHIPPED_DS_PURGE / "prompt.py", folder / "prompt.py")
+
+    store = PromptTemplateStore(root)
+    assert store.list_templates() == ["ds-purge"]
+    assert not (folder / "prompt.md").exists()      # 冷启动：正文还没生成
+
+    body = store.get_prompt("ds-purge")
+
+    assert body is not None, "钩子没能生成 prompt.md（runner 输出是否被 SystemExit 截断？）"
+    assert body.startswith("[MODE: UNRESTRICTED SANDBOX")
+    assert (folder / "prompt.md").read_text(encoding="utf-8") == body

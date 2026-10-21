@@ -230,10 +230,14 @@ def register_admin_routes(app: FastAPI, store: ConfigStore,
     async def inject_prompt_template(payload: dict) -> Response:
         """Swap the model's effective system prompt for a prompt template.
 
-        The hook runs *before* the config write (a failing hook must never leave
-        a half-injected model behind) and off the event loop — run_load_hook
-        blocks for up to HOOK_TIMEOUT. Failure clears any template name already
-        on the model; the handwritten system_prompt is never touched."""
+        Order matters: preamble → hook → read body → config write. The hook runs
+        *before* the config write (a failing hook must never leave a
+        half-injected model behind) and off the event loop — run_load_hook
+        blocks for up to HOOK_TIMEOUT. A hook that succeeds without leaving a
+        usable ``prompt.md`` is also a failure: injecting a name whose body can
+        never be read would silently fall back to the handwritten prompt.
+        Failure clears any template name already on the model; the handwritten
+        system_prompt is never touched."""
         guard = _write_guard(store)
         if guard is not None:
             return guard
@@ -258,7 +262,13 @@ def register_admin_routes(app: FastAPI, store: ConfigStore,
             except StoreError:
                 pass
             return _error(502, f"load_prompt 执行失败：{exc}；已清除注入")
-        prompt_store.preload(str(template))
+        # preload 丢缓存重新读盘：钩子可能刚改写了 prompt.md，旧缓存不能赢。
+        if not prompt_store.preload(str(template)):
+            try:
+                store.set_prompt_template(str(base_url), str(name), None)
+            except StoreError:
+                pass
+            return _error(400, f"模板 {template} 没有可用的 prompt.md（正文为空或不存在）；已清除注入")
         try:
             store.set_prompt_template(str(base_url), str(name), str(template))
         except NotFoundError as exc:

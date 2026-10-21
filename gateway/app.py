@@ -579,7 +579,9 @@ def build_app(
             # touches the disk.
             prompt_body = None
             if endpoint.prompt_template:
-                prompt_body = app.state.prompt_templates.get_prompt(
+                # aget_prompt: 冷缓存时可能执行模板钩子（最长 30s），必须让出
+                # 事件循环 —— 同步版会阻塞所有并发请求。
+                prompt_body = await app.state.prompt_templates.aget_prompt(
                     endpoint.prompt_template
                 )
             _rewrite_body(body, endpoint, convert_stats, store.config.extra_body,

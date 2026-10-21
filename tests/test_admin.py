@@ -1,7 +1,9 @@
 import json
+import subprocess
 from urllib.parse import quote
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from gateway.app import build_app
@@ -866,10 +868,11 @@ def _prompts_dir(tmp_path, hook_body=None):
 
 
 def test_list_prompt_templates(tmp_path):
+    # 规则 1：目录名存在就列出，即使里面还没有 prompt.md（正文可能由钩子生成）。
     client, _ = make_app(tmp_path, prompts_dir=_prompts_dir(tmp_path))
     resp = client.get("/admin/api/prompt-templates")
     assert resp.status_code == 200
-    assert resp.json() == {"templates": ["system-prompt"]}
+    assert resp.json() == {"templates": ["empty", "system-prompt"]}
 
 
 def test_inject_prompt_template_success(tmp_path):
@@ -900,12 +903,57 @@ def test_inject_failure_clears_template_and_returns_502(tmp_path):
     assert m["system_prompt"] == "hand"      # 手写内容不受影响
 
 
-def test_inject_rejects_unknown_template(tmp_path):
+def test_inject_unknown_template(tmp_path):
     client, _ = make_app(tmp_path, prompts_dir=_prompts_dir(tmp_path))
     resp = client.post("/admin/api/endpoints/models/prompt-template",
                        json={"base_url": "https://upstream.example",
-                             "name": "gpt-4o", "template": "empty"})
+                             "name": "gpt-4o", "template": "does-not-exist"})
     assert resp.status_code == 400
+
+
+def test_inject_py_only_template_runs_hook_then_injects(tmp_path):
+    # 规则 3：目录里只有 prompt.py —— 注入时先跑钩子，正文由它生成后注入成功。
+    root = tmp_path / "prompts"
+    d = root / "generated"
+    d.mkdir(parents=True)
+    (d / "prompt.py").write_text(
+        "import pathlib\n"
+        "def load_prompt():\n"
+        "    pathlib.Path('prompt.md').write_text('FROM-HOOK', encoding='utf-8')\n"
+        "    return 0\n", encoding="utf-8")
+    client, p = make_app(tmp_path, prompts_dir=root)
+    resp = client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example",
+                             "name": "gpt-4o", "template": "generated"})
+    assert resp.status_code == 200
+    assert resp.json()["prompt_template"] == "generated"
+    assert (d / "prompt.md").read_text(encoding="utf-8") == "FROM-HOOK"
+
+
+def test_inject_py_only_hook_run_succeeds_but_no_md_is_400(tmp_path):
+    # 钩子跑成功但没生成 prompt.md → 不注入（不留一个用不了模板名在配置里）。
+    root = tmp_path / "prompts"
+    d = root / "no-output"
+    d.mkdir(parents=True)
+    (d / "prompt.py").write_text("def load_prompt():\n    return 0\n", encoding="utf-8")
+    client, p = make_app(tmp_path, prompts_dir=root)
+    resp = client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example",
+                             "name": "gpt-4o", "template": "no-output"})
+    assert resp.status_code == 400
+    m = json.loads(p.read_text())["endpoints"][0]["models"][0]
+    assert "prompt_template" not in m
+
+
+def test_inject_md_only_without_hook_does_not_spawn(tmp_path, monkeypatch):
+    # 只有 md：直接用正文，不起子进程。
+    monkeypatch.setattr(subprocess, "run",
+                        lambda *a, **k: pytest.fail("spawned a subprocess"))
+    client, _ = make_app(tmp_path, prompts_dir=_prompts_dir(tmp_path))
+    resp = client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example",
+                             "name": "gpt-4o", "template": "system-prompt"})
+    assert resp.status_code == 200
 
 
 def test_inject_unknown_model_is_404_and_never_runs_hook(tmp_path):
@@ -975,4 +1023,4 @@ def test_list_prompt_templates_read_only(tmp_path):
     client, _ = make_app(tmp_path, config_path=False, prompts_dir=_prompts_dir(tmp_path))
     resp = client.get("/admin/api/prompt-templates")
     assert resp.status_code == 200
-    assert resp.json() == {"templates": ["system-prompt"]}
+    assert resp.json() == {"templates": ["empty", "system-prompt"]}

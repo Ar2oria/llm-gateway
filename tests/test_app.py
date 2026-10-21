@@ -1845,3 +1845,94 @@ def test_request_falls_back_to_handwritten_when_template_blank(tmp_path):
     resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
     assert resp.status_code == 200
     assert json.loads(captures["body"])["system"] == "hand"
+
+
+def test_request_after_restart_regenerates_missing_md_via_hook(tmp_path):
+    # 规则 2B：重启后进程缓存为空，第一次用到已注入模板时目录里只有
+    # prompt.py（prompt.md 被删了）。必须跑钩子生成正文再注入，而不是悄悄
+    # 回落到手写提示词。
+    folder = tmp_path / "prompts" / "py-only"
+    folder.mkdir(parents=True)
+    (folder / "prompt.py").write_text(
+        "import pathlib\n"
+        "def load_prompt():\n"
+        "    pathlib.Path('prompt.md').write_text('RESTORED', encoding='utf-8')\n"
+        "    return 0\n", encoding="utf-8")
+    captures = {}
+
+    client = make_client_with_prompts(
+        _capture_handler(captures), tmp_path / "prompts", tmp_path,
+        config=_config_with_injected_template("py-only"),
+    )
+    assert not (folder / "prompt.md").exists()     # 冷缓存 + 正文缺失
+    resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
+    assert resp.status_code == 200
+    assert json.loads(captures["body"])["system"] == "RESTORED"
+    assert (folder / "prompt.md").exists()          # 钩子已把它写回来
+
+
+def test_request_py_only_without_md_falls_back_to_handwritten(tmp_path):
+    # 钩子跑成功却没写出 prompt.md：不注入，回落手写提示词，请求不报错。
+    folder = tmp_path / "prompts" / "no-output"
+    folder.mkdir(parents=True)
+    (folder / "prompt.py").write_text("def load_prompt():\n    return 0\n",
+                                      encoding="utf-8")
+    captures = {}
+
+    client = make_client_with_prompts(
+        _capture_handler(captures), tmp_path / "prompts", tmp_path,
+        config=_config_with_injected_template("no-output"),
+    )
+    resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
+    assert resp.status_code == 200
+    assert json.loads(captures["body"])["system"] == "hand"
+
+
+def test_hook_does_not_block_the_event_loop(tmp_path):
+    # 规则 2B 的钩子在异步请求路径上跑：必须丢到线程里，否则一次首用会卡住
+    # 整个事件循环（HOOK_TIMEOUT 长达 30s）。
+    folder = tmp_path / "prompts" / "slow"
+    folder.mkdir(parents=True)
+    (folder / "prompt.py").write_text(
+        "import time\ndef load_prompt():\n"
+        "    time.sleep(0.6)\n"
+        "    return 0\n", encoding="utf-8")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-type": "application/json"},
+                              stream=httpx.ByteStream(b"{}"))
+
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps(config_to_dict(_config_with_injected_template("slow"))))
+    app = build_app(
+        _config_with_injected_template("slow"),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        config_path=p, watcher_cache_path=tmp_path / "cache.json",
+        prompts_dir=tmp_path / "prompts",
+    )
+
+    async def run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport,
+                                     base_url="http://test") as client:
+            # 后台心跳：事件循环若被钩子阻塞，ticks 会远远少于预期。
+            ticks = 0
+            stop = asyncio.Event()
+
+            async def heartbeat():
+                nonlocal ticks
+                while not stop.is_set():
+                    ticks += 1
+                    await asyncio.sleep(0.02)
+
+            beat = asyncio.create_task(heartbeat())
+            resp = await client.post("/v1/messages",
+                                     json={"model": "gpt-4o", "messages": []})
+            stop.set()
+            await beat
+            return resp, ticks
+
+    resp, ticks = asyncio.run(run())
+    assert resp.status_code == 200
+    # 0.6s / 0.02s ≈ 30；被阻塞时只会有 0~1 次。
+    assert ticks > 10, f"event loop was blocked (only {ticks} ticks)"
