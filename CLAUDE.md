@@ -109,6 +109,6 @@ Client → app.py:proxy_request → ModelRouter.route() → header pipeline → 
 - **Body rewrites re-serialize JSON** — field order/indentation not preserved.
 - **Stats records `endpoint.model` (client-facing), cost frozen at write time.** Decode TPS = `output / (duration - TTFT)` (queueing included in TTFT); non-streaming fakes 3 s TTFT (no offset if duration ≤ 3 s).
 - **`working_model` is process-global**, not per-client — concurrent non-body requests can observe each other's last model.
-- **`prompt_template` 只存模板名，正文按名从 `prompts/` 首次用到时读入内存并常驻；钩子失败只清 `prompt_template`，手写 `system_prompt` 保留。** 注入成功时 `preload` 已把正文读进缓存，改 `prompt.md` 需重启网关；请求时取不到正文（目录删除/正文全空白/非 UTF-8）回落到手写提示词，不报错。
+- **`prompt_template` 只存模板名，正文按名从 `prompts/` 读入内存并常驻；钩子失败只清 `prompt_template`，手写 `system_prompt` 保留。** 注入成功时 `preload` 已把正文读进缓存（`preload` 只清负结果、从不清正结果），所以改 `prompt.md` 只能靠重启刷新，注入后再删目录也仍用缓存；只有**冷缓存**（重启后正文尚未载入）遇到目录已删/正文全空白/非 UTF-8 才回落到手写提示词。`preload` 的返回值被忽略——正文为空的模板也能注入成功，配置里留名、界面显示模板名，实际用手写提示词。对已注入的模型再注入会被 409 拒绝，重试需先「取消注入」。
 - **Debug logging logs real keys** — trusted contexts only.
 - Reference specs/plans in `docs/superpowers/`; `maybe-todo.md` is aspirational (partly shipped) — verify against code.
