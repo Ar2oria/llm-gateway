@@ -109,14 +109,14 @@ def test_list_endpoints_shape(tmp_path):
             "custom_headers": {"Authorization": "Bearer real"},
             "models_news": [],
             "models": [{"name": "gpt-4o", "upstream_model": None, "system_prompt": None,
-                        "pricing": None, "protocol": None}],
+                        "prompt_template": None, "pricing": None, "protocol": None}],
         },
         {
             "base_url": "https://anthropic.example",
             "custom_headers": {},
             "models_news": [],
             "models": [{"name": "claude-3-5-sonnet", "upstream_model": None, "system_prompt": None,
-                        "pricing": None, "protocol": None}],
+                        "prompt_template": None, "pricing": None, "protocol": None}],
         },
     ]
 

@@ -142,7 +142,7 @@ def test_endpoint_dicts_includes_empty_models_endpoint(tmp_path):
             "custom_headers": {},
             "models_news": [],
             "models": [{"name": "m1", "upstream_model": "r", "system_prompt": None,
-                        "pricing": None, "protocol": None}],
+                        "prompt_template": None, "pricing": None, "protocol": None}],
         },
     ]
     assert store.endpoint_dicts(base_url="https://empty.com") == [
@@ -314,3 +314,45 @@ def test_endpoint_dicts_exposes_models_news(tmp_path):
     dicts = store.endpoint_dicts()
     assert dicts[0]["models_news"] == ["v2"]
     assert dicts[1]["models_news"] == []
+
+
+def test_set_prompt_template_writes_name_and_keeps_handwritten_prompt(tmp_path):
+    store, p = make_store(tmp_path)
+    store.update_model("https://a.com", "m1", system_prompt="hand")
+    ep = store.set_prompt_template("https://a.com", "m1", "system-prompt")
+    assert ep.prompt_template == "system-prompt"
+    assert ep.system_prompt == "hand"
+    data = json.loads(p.read_text())
+    m1 = next(m for e in data["endpoints"] for m in e["models"] if m["name"] == "m1")
+    assert m1 == {"name": "m1", "system_prompt": "hand", "prompt_template": "system-prompt"}
+
+
+def test_set_prompt_template_none_clears_only_template(tmp_path):
+    store, p = make_store(tmp_path)
+    store.update_model("https://a.com", "m1", system_prompt="hand")
+    store.set_prompt_template("https://a.com", "m1", "system-prompt")
+    ep = store.set_prompt_template("https://a.com", "m1", None)
+    assert ep.prompt_template is None
+    assert ep.system_prompt == "hand"
+
+
+def test_set_prompt_template_unknown_model_raises(tmp_path):
+    store, _ = make_store(tmp_path)
+    with pytest.raises(NotFoundError):
+        store.set_prompt_template("https://a.com", "nope", "system-prompt")
+
+
+def test_update_model_omitting_system_prompt_keeps_it(tmp_path):
+    store, p = make_store(tmp_path)
+    store.update_model("https://a.com", "m1", system_prompt="hand")
+    store.update_model("https://a.com", "m1", upstream_model="real")
+    m1 = json.loads(p.read_text())["endpoints"][0]["models"][0]
+    assert m1["system_prompt"] == "hand"
+
+
+def test_endpoint_dicts_exposes_prompt_template(tmp_path):
+    store, _ = make_store(tmp_path)
+    store.set_prompt_template("https://a.com", "m1", "system-prompt")
+    models = store.endpoint_dicts(base_url="https://a.com")[0]["models"]
+    assert models[0]["prompt_template"] == "system-prompt"
+    assert models[1]["prompt_template"] is None

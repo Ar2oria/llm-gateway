@@ -173,7 +173,7 @@ class ConfigStore:
         base_url: str,
         name: str,
         upstream_model: str | None = None,
-        system_prompt: str | None = None,
+        system_prompt: str | None | object = _UNSET,
         pricing: dict[str, float] | None | object = _UNSET,
         protocol: str | None | object = _UNSET,
     ) -> EndpointConfig:
@@ -191,10 +191,11 @@ class ConfigStore:
                 model_entry["upstream_model"] = str(upstream_model)
             else:
                 model_entry.pop("upstream_model", None)
-            if system_prompt:
-                model_entry["system_prompt"] = str(system_prompt)
-            else:
-                model_entry.pop("system_prompt", None)
+            if system_prompt is not _UNSET:
+                if system_prompt:
+                    model_entry["system_prompt"] = str(system_prompt)
+                else:
+                    model_entry.pop("system_prompt", None)
             if pricing is not _UNSET:
                 if pricing:
                     model_entry["pricing"] = dict(pricing)
@@ -205,6 +206,28 @@ class ConfigStore:
                     model_entry["protocol"] = str(protocol)
                 else:
                     model_entry.pop("protocol", None)
+            self._commit(raw)
+            return self._find_model(base_url, name)
+
+    def set_prompt_template(self, base_url: str, name: str, template: str | None) -> EndpointConfig:
+        """Inject (``template`` is a string) or cancel injection (``template``
+        is ``None``) by writing only the template *name*. The model's
+        handwritten ``system_prompt`` is left byte-identical, so cancelling the
+        injection naturally restores it."""
+        with self._lock:
+            raw = copy.deepcopy(self._snapshot.raw)
+            base_url = normalize_base_url(str(base_url))
+            entry = self._find_endpoint_raw(raw, base_url)
+            if entry is None:
+                raise NotFoundError(f"endpoint not found: {base_url}")
+            name = str(name)
+            model_entry = self._find_model_raw(entry, name)
+            if model_entry is None:
+                raise NotFoundError(f"model not found: {name}")
+            if template:
+                model_entry["prompt_template"] = str(template)
+            else:
+                model_entry.pop("prompt_template", None)
             self._commit(raw)
             return self._find_model(base_url, name)
 
@@ -240,6 +263,7 @@ class ConfigStore:
                         "name": m["name"],
                         "upstream_model": m.get("upstream_model"),
                         "system_prompt": m.get("system_prompt"),
+                        "prompt_template": m.get("prompt_template"),
                         "pricing": m.get("pricing"),
                         "protocol": m.get("protocol"),
                     }
