@@ -1,9 +1,9 @@
 """Prompt template store (prompt-injection feature).
 
 Discovers prompt-template folders under the ``prompts/`` root and lazily
-caches each folder's ``prompt.md`` body in memory. Construction only scans
-directory names — it never reads ``prompt.md`` / ``prompt.py`` — so startup
-stays cheap and a broken or missing template cannot fail the gateway boot.
+caches each folder's ``prompt.md`` body in memory. Construction performs no
+I/O at all — ``prompt.md`` is only read on the first ``get_prompt`` — so a
+missing or broken template can never fail the gateway boot.
 """
 
 from __future__ import annotations
@@ -41,12 +41,6 @@ class PromptTemplateStore:
         self._root = Path(root)
         self._cache: dict[str, str | None] = {}
         self._lock = threading.Lock()
-        # 构造时只做一次目录项扫描（不读任何文件），供后续任务判断
-        # 模板目录里是否有 prompt.py 之类的附属文件。
-        try:
-            self._initial_names: set[str] = {p.name for p in self._root.iterdir()}
-        except OSError:
-            self._initial_names = set()
 
     def list_templates(self) -> list[str]:
         """升序返回所有带 ``prompt.md`` 的子目录名；根目录缺失返回空列表。"""
@@ -68,7 +62,9 @@ class PromptTemplateStore:
             content: str | None = None
             try:
                 text = (self._root / name / PROMPT_FILENAME).read_text(encoding="utf-8")
-            except OSError:
+            except (OSError, ValueError):
+                # ValueError 覆盖 UnicodeDecodeError（非 UTF-8 文件）与内嵌 NUL
+                # 名字导致的 "embedded null byte"；都按“模板不可用”缓存负结果。
                 text = ""
             if text.strip():
                 content = text

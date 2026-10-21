@@ -73,6 +73,35 @@ def test_illegal_names_never_touch_disk(tmp_path, monkeypatch, name):
     assert reads == []
 
 
+def test_undecodable_prompt_is_treated_as_missing_and_cached(tmp_path, monkeypatch):
+    root = make_root(tmp_path)
+    (root / "alpha" / "prompt.md").write_bytes("中文提示词".encode("gbk"))
+    store = PromptTemplateStore(root)
+    assert store.get_prompt("alpha") is None        # 非法 UTF-8 -> 负结果
+    reads = []
+    monkeypatch.setattr(pathlib.Path, "read_text",
+                        lambda self, *a, **k: reads.append(self) or "X")
+    assert store.get_prompt("alpha") is None        # 负结果已缓存，不再读盘
+    assert reads == []
+
+
+def test_nul_byte_name_returns_none_without_raising(tmp_path, monkeypatch):
+    store = PromptTemplateStore(make_root(tmp_path))
+    reads = []
+    real = pathlib.Path.read_text
+
+    def spy(self, *a, **k):
+        if "\x00" in str(self):                     # 真实 read_text 同样抛 ValueError
+            raise ValueError("embedded null byte")
+        reads.append(self)
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(pathlib.Path, "read_text", spy)
+    assert store.get_prompt("a\x00b") is None       # 内嵌 NUL -> ValueError 被吞掉
+    assert store.get_prompt("a\x00b") is None       # 第二次仍返回 None，不抛
+    assert reads == []
+
+
 def test_preload_reports_whether_prompt_is_available(tmp_path):
     root = make_root(tmp_path)
     store = PromptTemplateStore(root)
