@@ -177,20 +177,62 @@ def _rewrite_body(data: dict,
     final_protocol = convert_stats.target or convert_stats.source
     if effective_prompt:
         if final_protocol == Protocol.ANTHROPIC_MESSAGES:
-            data["system"] = effective_prompt
+            # Anthropic accepts ``system`` as a string or as text blocks.
+            # Emit a single block carrying a cache breakpoint: a bare string
+            # would discard whatever cache_control the client sent and leave
+            # the upstream with no marker for the system prefix.
+            data["system"] = [
+                {
+                    "type": "text",
+                    "text": effective_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
         elif final_protocol == Protocol.OPENAI_RESPONSES:
+            # Responses has two system channels: the top-level
+            # ``instructions`` string and SYSTEM-role items inside ``input``.
+            # Both must go, or the client's prompt survives alongside the
+            # injected one. Clients put those items at the head of the array;
+            # only the first four are considered — anything later is real
+            # conversation and stays untouched.
+            data.pop("instructions", None)
+            items = data.get("input")
+            if isinstance(items, list):
+                kept = [
+                    item
+                    for index, item in enumerate(items)
+                    if not (
+                        index < 4
+                        and isinstance(item, dict)
+                        and item.get("role") in ("system", "developer")
+                    )
+                ]
+                if len(kept) != len(items):
+                    data["input"] = kept
             data["instructions"] = effective_prompt
         else:
-            replaced = False
-            for msg in data.get("messages", []):
-                if isinstance(msg, dict) and msg.get("role") == "system":
-                    msg["content"] = effective_prompt
-                    replaced = True
-                    break
-            if not replaced:
-                data.setdefault("messages", []).insert(
-                    0, {"role": "system", "content": effective_prompt}
-                )
+            # Chat accepts system content only at the head of ``messages``,
+            # and clients may send ``system`` or ``developer`` there. Drop
+            # both from the first four entries, then put the injected prompt
+            # in slot 0. Later system/developer turns are conversation, not a
+            # system prompt, and stay untouched.
+            messages = data.get("messages")
+            if isinstance(messages, list):
+                kept = [
+                    msg
+                    for index, msg in enumerate(messages)
+                    if not (
+                        index < 4
+                        and isinstance(msg, dict)
+                        and msg.get("role") in ("system", "developer")
+                    )
+                ]
+                if len(kept) != len(messages):
+                    messages = kept
+                messages.insert(0, {"role": "system", "content": effective_prompt})
+                data["messages"] = messages
+            else:
+                data["messages"] = [{"role": "system", "content": effective_prompt}]
     if extra_body and convert_stats.need_convert():
         # Extra params win over converted defaults (e.g. a pinned
         # reasoning.effort from output_config vs a configured one).

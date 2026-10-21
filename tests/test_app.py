@@ -12,6 +12,11 @@ from gateway.app import build_app
 from gateway.config import EndpointConfig, GatewayConfig, config_to_dict
 
 
+def anthropic_system_block(text):
+    """The shape the Anthropic system slot takes after an injected prompt."""
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
 def make_config() -> GatewayConfig:
     return GatewayConfig(
         host="127.0.0.1",
@@ -870,9 +875,11 @@ def test_system_prompt_replaces_first_openai_system_message():
     )
     assert resp.status_code == 200
     messages = json.loads(captured["body"])["messages"]
-    assert messages[0] == {"role": "user", "content": "hi"}
-    assert messages[1] == {"role": "system", "content": "configured system prompt"}
-    assert messages[2] == {"role": "system", "content": "old2"}
+    # The injected prompt lands in slot 0; the client's system entries in the
+    # first four slots are removed rather than rewritten in place.
+    assert messages[0] == {"role": "system", "content": "configured system prompt"}
+    assert messages[1] == {"role": "user", "content": "hi"}
+    assert len(messages) == 2
 
 
 def test_system_prompt_injected_when_missing_openai():
@@ -924,7 +931,7 @@ def test_system_prompt_replaces_anthropic_top_level():
     )
     assert resp.status_code == 200
     data = json.loads(captured["body"])
-    assert data["system"] == "configured system prompt"
+    assert data["system"] == anthropic_system_block("configured system prompt")
 
 
 def test_system_prompt_injected_when_missing_anthropic():
@@ -949,7 +956,7 @@ def test_system_prompt_injected_when_missing_anthropic():
     )
     assert resp.status_code == 200
     data = json.loads(captured["body"])
-    assert data["system"] == "configured system prompt"
+    assert data["system"] == anthropic_system_block("configured system prompt")
     assert data["messages"] == [{"role": "user", "content": "hi"}]
 
 
@@ -1827,7 +1834,7 @@ def test_request_falls_back_to_handwritten_when_template_missing(tmp_path):
     )
     resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
     assert resp.status_code == 200
-    assert json.loads(captures["body"])["system"] == "hand"
+    assert json.loads(captures["body"])["system"] == anthropic_system_block("hand")
 
 
 def test_request_falls_back_to_handwritten_when_template_blank(tmp_path):
@@ -1844,7 +1851,7 @@ def test_request_falls_back_to_handwritten_when_template_blank(tmp_path):
     )
     resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
     assert resp.status_code == 200
-    assert json.loads(captures["body"])["system"] == "hand"
+    assert json.loads(captures["body"])["system"] == anthropic_system_block("hand")
 
 
 def test_request_after_restart_regenerates_missing_md_via_hook(tmp_path):
@@ -1867,7 +1874,7 @@ def test_request_after_restart_regenerates_missing_md_via_hook(tmp_path):
     assert not (folder / "prompt.md").exists()     # 冷缓存 + 正文缺失
     resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
     assert resp.status_code == 200
-    assert json.loads(captures["body"])["system"] == "RESTORED"
+    assert json.loads(captures["body"])["system"] == anthropic_system_block("RESTORED")
     assert (folder / "prompt.md").exists()          # 钩子已把它写回来
 
 
@@ -1885,7 +1892,7 @@ def test_request_py_only_without_md_falls_back_to_handwritten(tmp_path):
     )
     resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
     assert resp.status_code == 200
-    assert json.loads(captures["body"])["system"] == "hand"
+    assert json.loads(captures["body"])["system"] == anthropic_system_block("hand")
 
 
 def test_hook_does_not_block_the_event_loop(tmp_path):

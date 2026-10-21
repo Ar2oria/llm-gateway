@@ -15,3 +15,5 @@ docs/superpowers
 
 # ds-purge 的正文由 prompt.py 钩子从内嵌 base64 生成，不入库
 prompts/ds-purge/prompt.md
+prompts/cc-ds-purge/prompt.md
+prompts/codex-ds-purge/prompt.md

@@ -179,14 +179,28 @@ def test_rewrite_body_replaces_upstream_model_only():
     assert out["messages"] == [{"role": "user", "content": "hi"}]
 
 
+def anthropic_system_block(text):
+    """The shape the Anthropic system slot takes after an injected prompt."""
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
 def test_rewrite_body_replaces_first_openai_system_message():
+    # System/developer entries inside the first four slots are dropped, then
+    # the injected prompt takes slot 0. system at index 5 is conversation and
+    # survives.
     out = rewrite({"model": "m", "messages": [
         {"role": "user", "content": "hi"},
         {"role": "system", "content": "old1"},
-        {"role": "system", "content": "old2"},
+        {"role": "developer", "content": "old2"},
+        {"role": "user", "content": "u3"},
+        {"role": "user", "content": "u4"},
+        {"role": "system", "content": "keep"},
     ]}, make_endpoint(system_prompt="NEW"))
-    assert out["messages"][1] == {"role": "system", "content": "NEW"}
-    assert out["messages"][2] == {"role": "system", "content": "old2"}
+    assert out["messages"][0] == {"role": "system", "content": "NEW"}
+    assert [m["role"] for m in out["messages"]] == [
+        "system", "user", "user", "user", "system",
+    ]
+    assert out["messages"][-1] == {"role": "system", "content": "keep"}
 
 
 def test_rewrite_body_prepends_openai_system_message_when_absent():
@@ -202,7 +216,7 @@ def test_rewrite_body_sets_anthropic_top_level_system():
     out = rewrite({"model": "m", "messages": []},
                   make_endpoint(system_prompt="NEW"),
                   path="/v1/messages")
-    assert out["system"] == "NEW"
+    assert out["system"] == anthropic_system_block("NEW")
 
 
 def test_rewrite_body_sets_responses_instructions():
@@ -213,12 +227,75 @@ def test_rewrite_body_sets_responses_instructions():
     assert "messages" not in out
 
 
+def _msg(role, text="x"):
+    return {"type": "message", "role": role,
+            "content": [{"type": "input_text", "text": text}]}
+
+
+def test_rewrite_body_clears_stale_instructions_on_the_responses_path():
+    out = rewrite({"model": "m", "instructions": "stale", "input": []},
+                  make_endpoint(system_prompt="NEW"),
+                  path="/v1/responses")
+    assert out["instructions"] == "NEW"
+
+
+def test_rewrite_body_drops_system_and_developer_items_in_the_first_four():
+    out = rewrite({
+        "model": "m",
+        "input": [
+            _msg("developer", "d0"),
+            _msg("system", "s1"),
+            _msg("user", "u2"),
+            _msg("developer", "d3"),
+        ],
+    }, make_endpoint(system_prompt="NEW"), path="/v1/responses")
+    assert [i["role"] for i in out["input"]] == ["user"]
+    assert out["instructions"] == "NEW"
+
+
+def test_rewrite_body_leaves_system_items_from_index_four_on():
+    # Clients head-load their system items; anything past the fourth slot is
+    # real conversation and must survive untouched.
+    out = rewrite({
+        "model": "m",
+        "input": [
+            _msg("user", "u0"),
+            _msg("user", "u1"),
+            _msg("user", "u2"),
+            _msg("user", "u3"),
+            _msg("developer", "d4"),
+            _msg("system", "s5"),
+        ],
+    }, make_endpoint(system_prompt="NEW"), path="/v1/responses")
+    assert [i["role"] for i in out["input"]] == [
+        "user", "user", "user", "user", "developer", "system",
+    ]
+
+
+def test_rewrite_body_only_counts_message_items_toward_the_four_slot_window():
+    # The window is array position, not "the fourth message": tool items keep
+    # their slots, so a developer item behind four tool calls is past it.
+    tool = {"type": "function_call_output", "call_id": "c1", "output": "out"}
+    out = rewrite({
+        "model": "m",
+        "input": [tool, tool, tool, tool, _msg("developer", "d4")],
+    }, make_endpoint(system_prompt="NEW"), path="/v1/responses")
+    assert out["input"][-1]["role"] == "developer"
+
+
+def test_rewrite_body_responses_leaves_input_alone_without_a_prompt():
+    payload = {"model": "m", "instructions": "client", "input": [_msg("developer", "d0")]}
+    out = rewrite(dict(payload),
+                  make_endpoint(), path="/v1/responses", system_prompt=None)
+    assert out == payload
+
+
 def test_rewrite_body_applies_upstream_model_and_system_prompt_together():
     out = rewrite({"model": "orig", "messages": []},
                   make_endpoint(upstream_model="real", system_prompt="NEW"),
                   path="/v1/messages")
     assert out["model"] == "real"
-    assert out["system"] == "NEW"
+    assert out["system"] == anthropic_system_block("NEW")
 
 
 def test_rewrite_body_extra_body_null_deletes_field():
@@ -262,14 +339,14 @@ def test_rewrite_body_uses_explicit_system_prompt_override():
     out = rewrite({"model": "m", "system": "client"},
                   make_endpoint(system_prompt="hand"),
                   path="/v1/messages", system_prompt="TEMPLATE")
-    assert out["system"] == "TEMPLATE"
+    assert out["system"] == anthropic_system_block("TEMPLATE")
 
 
 def test_rewrite_body_falls_back_to_endpoint_prompt_when_override_none():
     out = rewrite({"model": "m", "system": "client"},
                   make_endpoint(system_prompt="hand"),
                   path="/v1/messages", system_prompt=None)
-    assert out["system"] == "hand"
+    assert out["system"] == anthropic_system_block("hand")
 
 
 def test_rewrite_body_writes_nothing_when_no_prompt_anywhere():
@@ -284,7 +361,7 @@ def test_rewrite_body_override_lands_in_each_protocols_system_slot(path):
                   make_endpoint(system_prompt="hand"), path=path,
                   system_prompt="TEMPLATE")
     if path == "/v1/messages":
-        assert out["system"] == "TEMPLATE"
+        assert out["system"] == anthropic_system_block("TEMPLATE")
     elif path == "/v1/responses":
         assert out["instructions"] == "TEMPLATE"
     else:
