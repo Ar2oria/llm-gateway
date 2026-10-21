@@ -955,3 +955,11 @@ def test_put_model_without_system_prompt_key_keeps_handwritten(tmp_path):
     m = json.loads(p.read_text())["endpoints"][0]["models"][0]
     assert m["system_prompt"] == "hand"
     assert m["upstream_model"] == "real"
+
+
+def test_list_prompt_templates_read_only(tmp_path):
+    # 只读模式（无 config_path）也要能列出模板——注入按钮需要它渲染下拉框
+    client, _ = make_app(tmp_path, config_path=False, prompts_dir=_prompts_dir(tmp_path))
+    resp = client.get("/admin/api/prompt-templates")
+    assert resp.status_code == 200
+    assert resp.json() == {"templates": ["system-prompt"]}
