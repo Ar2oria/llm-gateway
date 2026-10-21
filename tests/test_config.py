@@ -531,3 +531,12 @@ def test_prompt_template_rejects_names_after_stripping(bad):
     with pytest.raises(ConfigError, match="prompt_template"):
         validate_config({"server": {"api_key": "k"}, "endpoints": [
             {"base_url": "https://a.com", "models": [{"name": "m1", "prompt_template": bad}]}]})
+
+
+def test_prompt_template_trims_surrounding_whitespace():
+    raw = {"server": {"api_key": "k"}, "endpoints": [
+        {"base_url": "https://a.com",
+         "models": [{"name": "m1", "prompt_template": " system-prompt "}]}]}
+    cfg = validate_config(raw)
+    assert cfg.endpoints[0].prompt_template == "system-prompt"
+    assert config_to_dict(cfg)["endpoints"][0]["models"][0]["prompt_template"] == "system-prompt"
