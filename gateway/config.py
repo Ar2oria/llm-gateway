@@ -175,9 +175,11 @@ def validate_config(raw: dict) -> GatewayConfig:
             if prompt_template is not None:
                 if not isinstance(prompt_template, str) or not prompt_template.strip():
                     raise ConfigError("model 'prompt_template' must be a non-empty string")
+                # Normalize before the dot/separator checks: " .. " must be rejected
+                # as "..", not stored as a traversing-but-useless name.
+                prompt_template = prompt_template.strip()
                 if prompt_template in (".", "..") or "/" in prompt_template or "\\" in prompt_template:
                     raise ConfigError(f"invalid prompt_template name: {prompt_template}")
-                prompt_template = prompt_template.strip()
             endpoints.append(EndpointConfig(
                 model=str(name),
                 base_url=base_url,

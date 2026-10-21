@@ -523,3 +523,11 @@ def test_prompt_template_rejects_non_string():
     with pytest.raises(ConfigError, match="prompt_template"):
         validate_config({"server": {"api_key": "k"}, "endpoints": [
             {"base_url": "https://a.com", "models": [{"name": "m1", "prompt_template": 5}]}]})
+
+
+@pytest.mark.parametrize("bad", [" .", " .. ", "a/b "])
+def test_prompt_template_rejects_names_after_stripping(bad):
+    # 名字先 strip 再校验：否则 " ." / " .. " 会被存成 "." / ".."。
+    with pytest.raises(ConfigError, match="prompt_template"):
+        validate_config({"server": {"api_key": "k"}, "endpoints": [
+            {"base_url": "https://a.com", "models": [{"name": "m1", "prompt_template": bad}]}]})
