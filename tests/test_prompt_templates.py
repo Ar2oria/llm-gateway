@@ -1,8 +1,13 @@
 import pathlib
+import subprocess
 
 import pytest
 
-from gateway.prompt_templates import HookError, PromptTemplateStore
+from gateway.prompt_templates import (
+    _parse_hook_result,
+    HookError,
+    PromptTemplateStore,
+)
 
 
 def make_root(tmp_path):
@@ -118,7 +123,15 @@ def _template_with_py(tmp_path, body):
     return root
 
 
-def test_hook_missing_py_is_success(tmp_path):
+def _forbid_spawn(monkeypatch):
+    def spawn(*a, **k):
+        pytest.fail("spawned a subprocess")
+
+    monkeypatch.setattr(subprocess, "run", spawn)
+
+
+def test_hook_missing_py_is_success(tmp_path, monkeypatch):
+    _forbid_spawn(monkeypatch)
     root = make_root(tmp_path)                      # alpha 只有 prompt.md
     PromptTemplateStore(root).run_load_hook("alpha")  # 不抛异常即通过
 
@@ -135,6 +148,14 @@ def test_hook_zero_return_is_success_and_runs_in_template_dir(tmp_path):
 
 def test_hook_non_int_return_is_success(tmp_path):
     root = _template_with_py(tmp_path, "def load_prompt():\n    return None\n")
+    PromptTemplateStore(root).run_load_hook("tpl")
+
+
+@pytest.mark.parametrize("literal", ["True", "False"])
+def test_hook_bool_return_is_always_success(tmp_path, literal):
+    # 契约：bool 是 isinstance(int) 的特例，但 True/False 都不当作“非 0 失败”。
+    root = _template_with_py(tmp_path,
+        f"def load_prompt():\n    return {literal}\n")
     PromptTemplateStore(root).run_load_hook("tpl")
 
 
@@ -172,7 +193,8 @@ def test_hook_timeout_raises(tmp_path, monkeypatch):
         PromptTemplateStore(root).run_load_hook("tpl")
 
 
-def test_hook_illegal_name_raises_without_spawn(tmp_path):
+def test_hook_illegal_name_raises_without_spawn(tmp_path, monkeypatch):
+    _forbid_spawn(monkeypatch)
     store = PromptTemplateStore(make_root(tmp_path))
     with pytest.raises(HookError):
         store.run_load_hook("../alpha")
@@ -205,3 +227,45 @@ def test_hook_non_utf8_stdout_still_works(tmp_path):
         "    sys.stdout.buffer.write(b'\\xff\\xfe')\n"
         "    return 0\n")
     PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_prompt_py_directory_raises(tmp_path, monkeypatch):
+    _forbid_spawn(monkeypatch)
+    root = _template_with_py(tmp_path, "def load_prompt():\n    return 0\n")
+    (root / "tpl" / "prompt.py").unlink()
+    (root / "tpl" / "prompt.py").mkdir()            # 目录而非普通文件 -> 配置事故
+    with pytest.raises(HookError, match="普通文件"):
+        PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_parse_hook_result_rejects_invalid_json_after_marker():
+    assert _parse_hook_result("__HOOK_RESULT__{not json}") is None
+
+
+def test_parse_hook_result_rejects_json_non_dict():
+    assert _parse_hook_result("__HOOK_RESULT__[1, 2]") is None
+    assert _parse_hook_result("__HOOK_RESULT__3") is None
+
+
+def test_parse_hook_result_without_marker_is_none():
+    assert _parse_hook_result("") is None
+    assert _parse_hook_result("no marker here\n") is None
+
+
+def test_hook_present_unparseable_stdout_raises(tmp_path, monkeypatch):
+    # runner 被替换成“什么都不打印”的等价行为：直接 monkeypatch _RUNNER 不打印结果。
+    import gateway.prompt_templates as pt
+
+    root = _template_with_py(tmp_path, "def load_prompt():\n    return 0\n")
+    monkeypatch.setattr(pt, "_RUNNER", "import sys\nsys.exit(0)\n")
+    with pytest.raises(HookError, match="无法解析"):
+        PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_broken_symlink_raises(tmp_path, monkeypatch):
+    _forbid_spawn(monkeypatch)
+    root = _template_with_py(tmp_path, "def load_prompt():\n    return 0\n")
+    (root / "tpl" / "prompt.py").unlink()
+    (root / "tpl" / "prompt.py").symlink_to(root / "tpl" / "missing.py")
+    with pytest.raises(HookError, match="普通文件"):
+        PromptTemplateStore(root).run_load_hook("tpl")

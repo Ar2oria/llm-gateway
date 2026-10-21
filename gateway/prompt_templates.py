@@ -23,22 +23,24 @@ HOOK_FILENAME = "prompt.py"
 HOOK_TIMEOUT: float = 30.0
 
 # 子进程侧的最小 runner：用 runpy 执行模板脚本，再调用它定义的 load_prompt。
-# 结果以 __HOOK_RESULT__ 前缀的 JSON 行回报（取最后一行），标准输入关闭、
-# -I 隔离环境，脚本自身抛异常时靠非零退出码 + stderr 回溯来定位。
+# 结果以 ``_RESULT_MARKER`` 前缀 + JSON 回报（解析时取最后一次出现），标准输入
+# 关闭、-I 隔离环境，脚本自身抛异常时靠非零退出码 + stderr 回溯来定位。
+# 用 %-格式化而不是 f-string：runner 里全是 JSON 大括号，f-string 会把每个
+# 括号都写成 {{ }}，可读性更差。
+_RESULT_MARKER = "__HOOK_RESULT__"
+
 _RUNNER = (
     "import json, runpy, sys\n"
     "ns = runpy.run_path(sys.argv[1], run_name='__main__')\n"
     "fn = ns.get('load_prompt')\n"
     "if not callable(fn):\n"
-    "    print('__HOOK_RESULT__' + json.dumps({'ok': False, 'error': 'load_prompt not defined'}))\n"
+    "    print('%(marker)s' + json.dumps({'ok': False, 'error': 'load_prompt not defined'}))\n"
     "else:\n"
-    "    print('__HOOK_RESULT__' + json.dumps({'ok': True, 'result': None}))\n"
+    "    print('%(marker)s' + json.dumps({'ok': True, 'result': None}))\n"
     "    r = fn()\n"
     "    ok = (not isinstance(r, int)) or isinstance(r, bool) or r == 0\n"
-    "    print('__HOOK_RESULT__' + json.dumps({'ok': ok, 'result': r if isinstance(r, int) else None}))\n"
-)
-
-_RESULT_MARKER = "__HOOK_RESULT__"
+    "    print('%(marker)s' + json.dumps({'ok': ok, 'result': r if isinstance(r, int) else None}))\n"
+) % {"marker": _RESULT_MARKER}
 
 
 class HookError(Exception):
@@ -151,8 +153,12 @@ class PromptTemplateStore:
         if not _is_valid_name(name):
             raise HookError(f"非法的模板名: {name!r}")
         script = self._root / name / HOOK_FILENAME
-        if not script.is_file():
+        # is_symlink() 兜住断链（exists() 对断链返回 False，会被误判成“钩子不存在”）。
+        if not (script.exists() or script.is_symlink()):
             return
+        if not script.is_file():
+            # 存在但不是普通文件（目录、FIFO、断链）：配置事故，报错别静默跳过。
+            raise HookError(f"{HOOK_FILENAME} 不是普通文件：{script}")
         try:
             completed = subprocess.run(
                 [sys.executable, "-I", "-B", "-c", _RUNNER, str(script)],
