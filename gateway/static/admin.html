@@ -731,7 +731,7 @@ async function openInjectPromptModal(baseUrl, model) {
       status.textContent = err.message;
       save.disabled = false;
       document.getElementById("modal-cancel").disabled = false;
-      await loadEndpoints();     // 失败会清 prompt_template，刷新以同步按钮状态
+      await loadEndpoints();     // 刷新以同步按钮状态（502 钩子失败已清注入，409 说明其实已注入）
     }
   });
 }

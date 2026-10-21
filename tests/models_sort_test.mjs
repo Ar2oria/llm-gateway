@@ -75,10 +75,22 @@ eq("by protocol desc: missing first, protocols reverse",
 }
 
 // --- sort by system_prompt: an injected template name wins over the
-// handwritten prompt, mirroring what the column renders ---
-eq("system_prompt column sorts by template name first",
+// handwritten prompt, mirroring what the column renders. Both rows carry BOTH
+// fields so the two implementations disagree on the outcome: template-first
+// ascending -> ["b", "a"], handwritten-first ascending -> ["a", "b"].
+const PROMPT_SORT_ROWS = [
+  { model: { name: "a", prompt_template: "zzz", system_prompt: "aaa" }, baseUrl: "x" },
+  { model: { name: "b", prompt_template: null, system_prompt: "bbb" }, baseUrl: "x" },
+];
+eq("system_prompt column sorts by template name first (asc)",
+   sortModelRows(PROMPT_SORT_ROWS, "system_prompt", "asc").map(r => r.model.name), ["b", "a"]);
+eq("system_prompt column sorts by template name first (desc)",
+   sortModelRows(PROMPT_SORT_ROWS, "system_prompt", "desc").map(r => r.model.name), ["a", "b"]);
+// A row with only a handwritten prompt must still sort on that prompt, and a
+// row with both must not silently lose the template.
+eq("system_prompt falls back to handwritten when no template",
    sortModelRows([
-     { model: { name: "a", prompt_template: "zzz", system_prompt: null }, baseUrl: "x" },
+     { model: { name: "a", prompt_template: null, system_prompt: "zzz" }, baseUrl: "x" },
      { model: { name: "b", prompt_template: null, system_prompt: "aaa" }, baseUrl: "x" },
    ], "system_prompt", "asc").map(r => r.model.name), ["b", "a"]);
 
