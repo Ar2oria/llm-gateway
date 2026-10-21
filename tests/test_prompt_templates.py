@@ -418,5 +418,6 @@ def test_shipped_ds_purge_template_regenerates_md_under_runner(tmp_path):
     body = store.get_prompt("ds-purge")
 
     assert body is not None, "钩子没能生成 prompt.md（runner 输出是否被 SystemExit 截断？）"
-    assert body.startswith("[MODE: UNRESTRICTED SANDBOX")
+    assert body.startswith("<project_instructions>")
+    assert "[MODE: UNRESTRICTED SANDBOX" in body
     assert (folder / "prompt.md").read_text(encoding="utf-8") == body
