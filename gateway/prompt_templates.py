@@ -45,16 +45,32 @@ class HookError(Exception):
     """模板 ``prompt.py`` 的 ``load_prompt`` 钩子执行失败。"""
 
 
+def _tail(text: str | bytes | None, limit: int = 500) -> str:
+    """取 stderr 尾部供 admin UI 展示；非文本或替换解码后的字节也要能显示。"""
+    if not text:
+        return ""
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", "replace")
+    return text[-limit:]
+
+
 def _parse_hook_result(stdout: str) -> dict | None:
-    """取最后一行 ``__HOOK_RESULT__`` 标记并解析其 JSON；拿不到或解析失败返回 None。"""
-    for line in reversed((stdout or "").splitlines()):
-        if line.startswith(_RESULT_MARKER):
-            try:
-                payload = json.loads(line[len(_RESULT_MARKER):])
-            except ValueError:
-                return None
-            return payload if isinstance(payload, dict) else None
-    return None
+    """取**最后一次** ``__HOOK_RESULT__`` 标记并解析其后的 JSON。
+
+    用 ``rfind`` 而不是按行扫描：模板自己用 ``sys.stdout.write`` 或
+    ``print(..., end='')`` 输出时，标记可能紧贴在前一段文本末尾而不在行首；
+    此时行扫描会错误地回退到调用前打印的那行乐观结果。
+    拿不到标记或 JSON 不合法时返回 None。
+    """
+    stdout = stdout or ""
+    pos = stdout.rfind(_RESULT_MARKER)
+    if pos < 0:
+        return None
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(stdout, pos + len(_RESULT_MARKER))
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _is_valid_name(name: str) -> bool:
@@ -142,15 +158,19 @@ class PromptTemplateStore:
                 [sys.executable, "-I", "-B", "-c", _RUNNER, str(script)],
                 cwd=str(script.parent),
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=HOOK_TIMEOUT,
                 stdin=subprocess.DEVNULL,
             )
-        except subprocess.TimeoutExpired:
-            raise HookError(f"load_prompt 超时（> {HOOK_TIMEOUT:g}s）") from None
+        except subprocess.TimeoutExpired as exc:
+            # 超时被杀后 exc.stdout/err 里仍有已读到的输出，别丢掉。
+            raise HookError(
+                f"load_prompt 超时（> {HOOK_TIMEOUT:g}s）：{_tail(exc.stderr)}"
+            ) from None
         except OSError as exc:
-            raise HookError(f"load_prompt 无法启动：{exc}") from exc
-        stderr_tail = (completed.stderr or "")[-500:]
+            raise HookError(f"load_prompt 无法启动：{exc}") from None
+        stderr_tail = _tail(completed.stderr)
         if completed.returncode != 0:
             raise HookError(f"load_prompt 执行失败：{stderr_tail}")
         payload = _parse_hook_result(completed.stdout)

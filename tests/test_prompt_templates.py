@@ -176,3 +176,32 @@ def test_hook_illegal_name_raises_without_spawn(tmp_path):
     store = PromptTemplateStore(make_root(tmp_path))
     with pytest.raises(HookError):
         store.run_load_hook("../alpha")
+
+
+def test_hook_unterminated_stdout_before_nonzero_return_raises(tmp_path):
+    # 钩子写了不带换行的输出，结果标记不再位于行首；必须仍取最后一个标记。
+    root = _template_with_py(tmp_path,
+        "import sys\n"
+        "def load_prompt():\n"
+        "    sys.stdout.write('working')\n"
+        "    return 3\n")
+    with pytest.raises(HookError, match="3"):
+        PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_unterminated_stdout_before_zero_return_is_success(tmp_path):
+    root = _template_with_py(tmp_path,
+        "import sys\n"
+        "def load_prompt():\n"
+        "    sys.stdout.write('working')\n"
+        "    return 0\n")
+    PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_non_utf8_stdout_still_works(tmp_path):
+    root = _template_with_py(tmp_path,
+        "import sys\n"
+        "def load_prompt():\n"
+        "    sys.stdout.buffer.write(b'\\xff\\xfe')\n"
+        "    return 0\n")
+    PromptTemplateStore(root).run_load_hook("tpl")
