@@ -69,13 +69,13 @@ def make_client(handler) -> TestClient:
     return TestClient(app)
 
 
-def make_client_with_prompts(handler, prompts_dir, tmp_path) -> TestClient:
+def make_client_with_prompts(handler, prompts_dir, tmp_path, config=None) -> TestClient:
     """Proxy client with a writable config and an explicit template dir.
 
     The admin inject route needs ``config_path`` (writes 503 in read-only
-    mode), so this helper materialises ``make_config()`` in tmp_path.
+    mode), so this helper materialises the config in tmp_path.
     """
-    config = make_config()
+    config = config if config is not None else make_config()
     p = tmp_path / "config.json"
     p.write_text(json.dumps(config_to_dict(config)), encoding="utf-8")
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -1755,7 +1755,7 @@ def test_request_uses_injected_template_text(tmp_path):
     assert b"TEMPLATE-BODY" in captures["body"]
 
 
-def test_request_falls_back_when_template_dir_deleted(tmp_path):
+def test_request_uses_cached_template_after_dir_deleted(tmp_path):
     root = tmp_path / "prompts" / "system-prompt"
     root.mkdir(parents=True)
     (root / "prompt.md").write_text("TEMPLATE-BODY", encoding="utf-8")
@@ -1779,3 +1779,69 @@ def test_request_falls_back_when_template_dir_deleted(tmp_path):
     root.rmdir()
     client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
     assert b"TEMPLATE-BODY" in captures["body"]   # cached, still applies
+
+
+def _config_with_injected_template(template: str) -> GatewayConfig:
+    """One handwritten-prompt model pinned to a template name directly.
+
+    Bypasses the admin inject route on purpose: it rejects names that are not
+    on disk (400), while a name can become unavailable *after* injection
+    (deleted folder) or resolve to a blank body — exactly the fallback cases.
+    """
+    return GatewayConfig(
+        host="127.0.0.1",
+        port=8080,
+        api_key="local-secret",
+        endpoints=[
+            EndpointConfig(
+                model="gpt-4o",
+                base_url="https://upstream.example",
+                system_prompt="hand",
+                prompt_template=template,
+            ),
+        ],
+    )
+
+
+def _capture_handler(captures):
+    def handler(request: httpx.Request) -> httpx.Response:
+        captures["body"] = request.content
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            stream=httpx.ByteStream(b"{}"),
+        )
+    return handler
+
+
+def test_request_falls_back_to_handwritten_when_template_missing(tmp_path):
+    # The template name is configured but its folder never existed: get_prompt
+    # returns None and the handwritten prompt must be used (no 500).
+    prompts = tmp_path / "prompts"
+    prompts.mkdir()
+    captures = {}
+
+    client = make_client_with_prompts(
+        _capture_handler(captures), prompts, tmp_path,
+        config=_config_with_injected_template("ghost"),
+    )
+    resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
+    assert resp.status_code == 200
+    assert json.loads(captures["body"])["system"] == "hand"
+
+
+def test_request_falls_back_to_handwritten_when_template_blank(tmp_path):
+    # A whitespace-only prompt.md is "no template" for the store, so the
+    # handwritten prompt applies rather than an empty system field.
+    root = tmp_path / "prompts" / "blank"
+    root.mkdir(parents=True)
+    (root / "prompt.md").write_text("  \n\t\n ", encoding="utf-8")
+    captures = {}
+
+    client = make_client_with_prompts(
+        _capture_handler(captures), tmp_path / "prompts", tmp_path,
+        config=_config_with_injected_template("blank"),
+    )
+    resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
+    assert resp.status_code == 200
+    assert json.loads(captures["body"])["system"] == "hand"

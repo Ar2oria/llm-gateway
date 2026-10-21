@@ -157,16 +157,17 @@ def _rewrite_body(data: dict,
                   system_prompt: str | None = None):
     """Rewrite the request body per model config, in place.
 
-    `upstream_model` replaces the `model` field; `system_prompt` targets the
-    format's system field — Anthropic top-level `system`, Responses top-level
-    `instructions`, OpenAI the first `role: system` message (prepended if
-    absent). `extra_body` (per-protocol) overrides fields after conversion,
-    with a `null` value deleting the field (see the merge loop below).
+    `upstream_model` replaces the `model` field; the `system_prompt` argument
+    targets the format's system field — Anthropic top-level `system`,
+    Responses top-level `instructions`, OpenAI the first `role: system`
+    message (prepended if absent). `extra_body` (per-protocol) overrides
+    fields after conversion, with a `null` value deleting the field (see the
+    merge loop below).
 
-    `system_prompt` is the request-time override (the injected prompt
-    template's body). ``None`` falls back to ``endpoint.system_prompt``; an
-    empty string counts as "no prompt" — same truthiness the handwritten
-    prompt has always had, so a blank body can never blank out the config.
+    The `system_prompt` argument is the request-time override (the injected
+    prompt template's body). ``None`` falls back to ``endpoint.system_prompt``;
+    an empty string counts as "no prompt": nothing is written, so neither the
+    client's own system field nor ``endpoint.system_prompt`` is replaced.
     """
 
     if endpoint.upstream_model:
