@@ -86,6 +86,19 @@ def test_admin_page_wires_prompt_template_ui(tmp_path):
     assert 'actionBtn(promptButtonLabel(m), () => togglePromptTemplate(ep.base_url, m))' in html
 
 
+def test_model_modal_wires_prompt_field_and_toggle(tmp_path):
+    # 模型编辑弹窗：系统提示词字段由 promptFieldState 决定，且带注入/取消注入按钮
+    client, _ = make_app(tmp_path)
+    html = client.get("/admin").text
+    assert "promptFieldState" in html
+    assert 'id="m-prompt-toggle"' in html
+    # 已注入时用标签展示而不是可编辑 textarea
+    assert 'class="prompt-tag"' in html
+    assert "prompt-injected-hint" in html
+    # 新增模型时按钮禁用（模型还没写进 config）
+    assert "先保存模型，才能注入提示词" in html
+
+
 def test_admin_page_persists_tab_in_url_hash(tmp_path):
     # 切换标签页后刷新仍停留在当前标签页：hash 写入 + 恢复（纯解析函数由 tests/tab_test.mjs 覆盖）
     client, _ = make_app(tmp_path)

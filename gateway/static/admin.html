@@ -54,6 +54,23 @@
   .modal input[type=text], .modal textarea, .modal select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--card); color: var(--text); }
   .modal textarea { min-height: 72px; resize: vertical; }
   .modal input[disabled] { background: var(--bg); color: var(--muted); }
+  /* 系统提示词：标签行 + 只读的模板标签 */
+  .modal .prompt-label-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 12px 0 4px; }
+  .modal .prompt-label-row label { margin: 0; }
+  .modal .prompt-label-row button { font-size: 12px; padding: 3px 10px; }
+  .modal button[disabled] { cursor: not-allowed; opacity: .45; }
+  .modal button[disabled]:hover { border-color: var(--border); color: inherit; }
+  .modal .prompt-injected {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    min-height: 72px; padding: 10px; border: 1px dashed var(--border);
+    border-radius: var(--radius); background: var(--bg);
+  }
+  .prompt-tag {
+    display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; padding: 4px 12px; border-radius: 999px; font-size: 12px;
+    font-weight: 600; color: var(--accent); background: #eef2ff; border: 1px solid #c7d2fe;
+  }
+  .prompt-injected-hint { font-size: 12px; color: var(--muted); }
   .kv-row { display: flex; gap: 8px; margin-bottom: 6px; }
   .kv-row input[type=text] { flex: 1; }
   .kv-row button { flex: 0 0 auto; }
@@ -475,8 +492,13 @@ function actionBtn(label, onClick, cls) {
   return btn;
 }
 
+// 当前弹窗被关掉时要跑一次的回调：用于 async 流程等待「用户把这个弹窗处理完」
+//（注入弹窗成功后会延迟 400ms 自己 closeModal，直接重开编辑弹窗会被它覆盖）。
+let modalCloseHook = null;
+
 function showModal(html, opts) {
   const modal = document.getElementById("modal-content");
+  modalCloseHook = null;          // 新弹窗换掉了旧的：旧弹窗的关闭回调作废
   modal.classList.toggle("wide", !!(opts && opts.wide));
   modal.innerHTML = html;
   const closeBtn = document.createElement("button");
@@ -491,6 +513,15 @@ function showModal(html, opts) {
 function closeModal() {
   overlay.classList.remove("show");
   document.getElementById("modal-content").classList.remove("wide");
+  const hook = modalCloseHook;
+  modalCloseHook = null;
+  if (hook) hook();
+}
+
+// 返回一个「当前弹窗关闭时兑现」的 Promise。必须在 showModal 之后调用
+//（showModal 会清掉旧的 hook）。
+function modalClosed() {
+  return new Promise((resolve) => { modalCloseHook = () => resolve(); });
 }
 
 function kvRow(key, value) {
@@ -598,9 +629,10 @@ function openEndpointModal(ep) {
 
 function openModelModal(baseUrl, model) {
   const isEdit = !!model;
-  // 已注入模板时系统提示词只读（展示模板名，保存时不带 system_prompt 键，
-  // 后端把「缺键」视为保留原手写提示词）
-  const injected = isEdit && !!model.prompt_template;
+  // 已注入模板时系统提示词只读（展示模板名标签，保存时不带 system_prompt 键，
+  // 后端把「缺键」视为保留原手写提示词）。新增模型时注入按钮禁用：模型名还没
+  // 写进 config，注入接口会 404。
+  const field = promptFieldState({ isEdit, model });
   const pricing = isEdit ? (model.pricing || {}) : {};
   const curProtocol = isEdit ? (model.protocol || "") : "";
   const protocolOptions = [
@@ -611,6 +643,19 @@ function openModelModal(baseUrl, model) {
   ].map(p => '<option value="' + p.value + '"' + (p.value === curProtocol ? " selected" : "") + '>' +
              p.label + '</option>')
     .join("");
+  const promptLabel =
+    '<div class="prompt-label-row">' +
+    '  <label>系统提示词</label>' +
+    '  <button type="button" id="m-prompt-toggle"' +
+      (field.buttonDisabled ? ' disabled title="先保存模型，才能注入提示词"' : '') + '>' +
+      escapeHtml(field.buttonLabel) + '</button>' +
+    '</div>';
+  const promptField = field.injected
+    ? '<div class="prompt-injected">' +
+      '  <span class="prompt-tag" title="已注入的提示词模板">' + escapeHtml(field.tag) + '</span>' +
+      '  <span class="prompt-injected-hint">正文由模板提供，不可在此编辑</span>' +
+      '</div>'
+    : '<textarea id="m-system">' + escapeHtml(field.text) + '</textarea>';
   showModal(
     '<h2>' + (isEdit ? "编辑模型" : "添加模型") + '</h2>' +
     '<label>模型名称</label>' +
@@ -619,10 +664,8 @@ function openModelModal(baseUrl, model) {
     '<input type="text" id="m-upstream" value="' + escapeAttr(isEdit ? (model.upstream_model || "") : "") + '" placeholder="可选">' +
     '<label>协议</label>' +
     '<select id="m-protocol">' + protocolOptions + '</select>' +
-    '<label>系统提示词' + (injected ? '（模板：' + escapeHtml(model.prompt_template) + '）' : '') + '</label>' +
-    '<textarea id="m-system"' + (injected ? ' disabled' : '') + '>' +
-      escapeHtml(injected ? model.prompt_template : (isEdit ? (model.system_prompt || "") : "")) +
-    '</textarea>' +
+    promptLabel +
+    promptField +
     '<label>输入价格（$/1M tokens，可留空）</label>' +
     '<input type="text" id="m-price-input" placeholder="如 3" value="' + escapeAttr(pricing.input ?? "") + '">' +
     '<label>缓存读价格</label>' +
@@ -636,6 +679,19 @@ function openModelModal(baseUrl, model) {
     '  <button id="modal-save" class="primary">保存</button>' +
     '</div>'
   );
+
+  // 弹窗内的注入/取消注入按钮：等注入/取消的弹窗真正关掉后再按最新配置重建
+  // 编辑弹窗（模板标签、按钮文案都要跟着变）。不能直接 await toggle 后重开 ——
+  // 注入弹窗成功时会延迟 400ms 自己 closeModal，提前重开会被它覆盖掉。
+  const toggleBtn = document.getElementById("m-prompt-toggle");
+  if (!field.buttonDisabled) {
+    toggleBtn.addEventListener("click", async () => {
+      const latest = findModel(baseUrl, model.name) || model;
+      await togglePromptTemplate(baseUrl, latest);
+      const after = findModel(baseUrl, model.name);
+      if (after) openModelModal(baseUrl, after);
+    });
+  }
 
   document.getElementById("modal-cancel").addEventListener("click", closeModal);
   document.getElementById("modal-save").addEventListener("click", async () => {
@@ -651,7 +707,7 @@ function openModelModal(baseUrl, model) {
       pricing: Object.keys(pricing).length ? pricing : null,
     };
     // 注入中不发 system_prompt：后端以「键缺失」表示保留原手写提示词
-    if (!injected) payload.system_prompt = document.getElementById("m-system").value.trim() || null;
+    if (!field.injected) payload.system_prompt = document.getElementById("m-system").value.trim() || null;
     try {
       if (isEdit) {
         await api("PUT", "/admin/api/endpoints/models?base_url=" + encodeURIComponent(baseUrl)
@@ -673,6 +729,8 @@ function openModelModal(baseUrl, model) {
 }
 
 // —— 提示词模板注入：把一个模板文件的内容作为该模型的系统提示词注入上游 ——
+// 返回的 Promise 在「这次操作对应的弹窗被关掉」时兑现，方便调用方接着重开
+// 编辑弹窗（弹窗自己会延迟关闭，提前重开会被覆盖）。
 async function togglePromptTemplate(baseUrl, model) {
   if (model.prompt_template) {
     const ok = await confirmDialog("确定取消注入「" + model.prompt_template + "」？");
@@ -685,7 +743,7 @@ async function togglePromptTemplate(baseUrl, model) {
     } catch (err) { toast(err.message, "error"); }
     return;
   }
-  openInjectPromptModal(baseUrl, model);
+  await openInjectPromptModal(baseUrl, model);
 }
 
 // 注入请求是异步的：等回来时弹窗可能已被遮罩关闭，甚至被另一个弹窗顶替
@@ -705,7 +763,7 @@ async function openInjectPromptModal(baseUrl, model) {
     showModal('<h2>注入提示词</h2><p class="empty">prompts/ 下暂无模板</p>' +
               '<div class="modal-actions"><button id="modal-cancel">关闭</button></div>');
     document.getElementById("modal-cancel").addEventListener("click", closeModal);
-    return;
+    return modalClosed();
   }
   showModal(
     '<h2>注入提示词 · ' + escapeHtml(model.name) + '</h2>' +
@@ -718,6 +776,7 @@ async function openInjectPromptModal(baseUrl, model) {
     '  <button id="modal-cancel">取消</button>' +
     '  <button id="modal-save" class="primary">确定</button>' +
     '</div>');
+  const closed = modalClosed();
   document.getElementById("modal-cancel").addEventListener("click", closeModal);
   document.getElementById("modal-save").addEventListener("click", async () => {
     const status = document.getElementById("pt-status");
@@ -745,6 +804,7 @@ async function openInjectPromptModal(baseUrl, model) {
       document.getElementById("modal-cancel").disabled = false;
     }
   });
+  return closed;
 }
 
 // —— 全局附加请求字段（server.extra_body，按协议分 tab，转换时合并进对应协议的上游请求）——
@@ -1114,6 +1174,15 @@ async function deleteEndpoint(baseUrl) {
   }
 }
 
+// 从最新 endpoints 快照里取一个模型（注入/取消注入后要按新状态重建弹窗）。
+function findModel(baseUrl, name) {
+  for (const ep of endpoints) {
+    if (ep.base_url !== baseUrl) continue;
+    for (const m of ep.models) if (m.name === name) return m;
+  }
+  return null;
+}
+
 async function deleteModel(baseUrl, name) {
   try {
     await api("DELETE", "/admin/api/endpoints/models?base_url=" + encodeURIComponent(baseUrl)
@@ -1217,6 +1286,20 @@ function modelPromptCellText(model) {
 }
 function promptButtonLabel(model) {
   return model.prompt_template ? "取消注入" : "注入提示词";
+}
+// 模型编辑弹窗里「系统提示词」字段的状态。
+// - 已注入：只读，模板名以标签展示（正文内容不在这里编辑）
+// - 新增模型：注入按钮必须禁用 —— 模型名还没写进 config，注入接口会 404
+function promptFieldState({ isEdit, model }) {
+  const injected = !!isEdit && !!(model && model.prompt_template);
+  return {
+    injected,
+    readOnly: injected,
+    buttonLabel: injected ? "取消注入" : "注入提示词",
+    buttonDisabled: !isEdit,
+    tag: injected ? model.prompt_template : null,
+    text: injected ? "" : ((isEdit && model && model.system_prompt) || ""),
+  };
 }
 // PROMPTS-END
 
