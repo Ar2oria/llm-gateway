@@ -151,8 +151,9 @@ def test_hook_non_int_return_is_success(tmp_path):
     PromptTemplateStore(root).run_load_hook("tpl")
 
 
-@pytest.mark.parametrize("literal", ["True", "False"])
-def test_hook_bool_return_is_always_success(tmp_path, literal):
+@pytest.mark.parametrize("literal", ["True", "False"],
+                         ids=["returns_True", "returns_False"])
+def test_hook_bool_return_is_success(tmp_path, literal):
     # 契约：bool 是 isinstance(int) 的特例，但 True/False 都不当作“非 0 失败”。
     root = _template_with_py(tmp_path,
         f"def load_prompt():\n    return {literal}\n")
@@ -238,13 +239,22 @@ def test_hook_prompt_py_directory_raises(tmp_path, monkeypatch):
         PromptTemplateStore(root).run_load_hook("tpl")
 
 
-def test_parse_hook_result_rejects_invalid_json_after_marker():
-    assert _parse_hook_result("__HOOK_RESULT__{not json}") is None
+@pytest.mark.parametrize("stdout", [
+    "__HOOK_RESULT__{not json}",
+    "__HOOK_RESULT__{\"ok\": tru",
+])
+def test_parse_hook_result_rejects_invalid_json_after_marker(stdout):
+    assert _parse_hook_result(stdout) is None
 
 
-def test_parse_hook_result_rejects_json_non_dict():
-    assert _parse_hook_result("__HOOK_RESULT__[1, 2]") is None
-    assert _parse_hook_result("__HOOK_RESULT__3") is None
+@pytest.mark.parametrize("stdout", [
+    "__HOOK_RESULT__[]",
+    "__HOOK_RESULT__[1, 2]",
+    "__HOOK_RESULT__3",
+    '__HOOK_RESULT__"text"',
+])
+def test_parse_hook_result_rejects_json_non_dict(stdout):
+    assert _parse_hook_result(stdout) is None
 
 
 def test_parse_hook_result_without_marker_is_none():
