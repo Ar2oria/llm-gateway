@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 import gateway.app as gateway_app
 from gateway.app import build_app
-from gateway.config import EndpointConfig, GatewayConfig
+from gateway.config import EndpointConfig, GatewayConfig, config_to_dict
 
 
 def make_config() -> GatewayConfig:
@@ -66,6 +66,22 @@ def make_client(handler) -> TestClient:
     config = make_config()
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     app = build_app(config, client=http_client)
+    return TestClient(app)
+
+
+def make_client_with_prompts(handler, prompts_dir, tmp_path) -> TestClient:
+    """Proxy client with a writable config and an explicit template dir.
+
+    The admin inject route needs ``config_path`` (writes 503 in read-only
+    mode), so this helper materialises ``make_config()`` in tmp_path.
+    """
+    config = make_config()
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps(config_to_dict(config)), encoding="utf-8")
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    app = build_app(config, client=http_client, config_path=p,
+                    watcher_cache_path=tmp_path / "watcher-cache.json",
+                    prompts_dir=prompts_dir)
     return TestClient(app)
 
 
@@ -1711,3 +1727,55 @@ def test_watcher_not_started_without_config_path(tmp_path):
     with TestClient(app) as client:
         assert client.get("/admin/api/endpoints").status_code == 200
     assert not cache_path.exists()
+
+
+# --- injected prompt template body (request path) ---
+
+def test_request_uses_injected_template_text(tmp_path):
+    prompts = tmp_path / "prompts" / "system-prompt"
+    prompts.mkdir(parents=True)
+    (prompts / "prompt.md").write_text("TEMPLATE-BODY", encoding="utf-8")
+    captures = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captures["body"] = request.content
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            stream=httpx.ByteStream(b"{}"),
+        )
+
+    client = make_client_with_prompts(handler, tmp_path / "prompts", tmp_path)
+    resp = client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example", "name": "gpt-4o",
+                             "template": "system-prompt"})
+    assert resp.status_code == 200
+    resp = client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
+    assert resp.status_code == 200
+    assert b"TEMPLATE-BODY" in captures["body"]
+
+
+def test_request_falls_back_when_template_dir_deleted(tmp_path):
+    root = tmp_path / "prompts" / "system-prompt"
+    root.mkdir(parents=True)
+    (root / "prompt.md").write_text("TEMPLATE-BODY", encoding="utf-8")
+    captures = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captures["body"] = request.content
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            stream=httpx.ByteStream(b"{}"),
+        )
+
+    client = make_client_with_prompts(handler, tmp_path / "prompts", tmp_path)
+    resp = client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example", "name": "gpt-4o",
+                             "template": "system-prompt"})
+    assert resp.status_code == 200
+    for f in root.iterdir():
+        f.unlink()
+    root.rmdir()
+    client.post("/v1/messages", json={"model": "gpt-4o", "messages": []})
+    assert b"TEMPLATE-BODY" in captures["body"]   # cached, still applies

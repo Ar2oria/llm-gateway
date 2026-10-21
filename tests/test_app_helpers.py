@@ -157,8 +157,10 @@ def test_reasoning_effort_extracts_final_upstream_shape(body, expected):
 
 # --- _rewrite_body ---
 
-def rewrite(data, endpoint, path="/v1/chat/completions", target=None, extra_body=None):
-    _rewrite_body(data, endpoint, get_convert_stats(path, target), extra_body)
+def rewrite(data, endpoint, path="/v1/chat/completions", target=None, extra_body=None,
+            system_prompt=None):
+    _rewrite_body(data, endpoint, get_convert_stats(path, target), extra_body,
+                  system_prompt=system_prompt)
     return data
 
 
@@ -252,3 +254,46 @@ def test_rewrite_body_extra_body_keyed_by_target_protocol():
                    make_endpoint(), path="/v1/chat/completions",
                    target="anthropic_messages", extra_body={"anthropic_messages": {"stop": None}})
     assert "stop" not in out
+
+
+# --- _rewrite_body: injected template body (request-time override) ---
+
+def test_rewrite_body_uses_explicit_system_prompt_override():
+    out = rewrite({"model": "m", "system": "client"},
+                  make_endpoint(system_prompt="hand"),
+                  path="/v1/messages", system_prompt="TEMPLATE")
+    assert out["system"] == "TEMPLATE"
+
+
+def test_rewrite_body_falls_back_to_endpoint_prompt_when_override_none():
+    out = rewrite({"model": "m", "system": "client"},
+                  make_endpoint(system_prompt="hand"),
+                  path="/v1/messages", system_prompt=None)
+    assert out["system"] == "hand"
+
+
+def test_rewrite_body_writes_nothing_when_no_prompt_anywhere():
+    out = rewrite({"model": "m", "messages": [{"role": "user", "content": "hi"}]},
+                  make_endpoint(), system_prompt=None)
+    assert out == {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
+
+
+@pytest.mark.parametrize("path", ["/v1/messages", "/v1/responses", "/v1/chat/completions"])
+def test_rewrite_body_override_lands_in_each_protocols_system_slot(path):
+    out = rewrite({"model": "m", "messages": [{"role": "user", "content": "hi"}]},
+                  make_endpoint(system_prompt="hand"), path=path,
+                  system_prompt="TEMPLATE")
+    if path == "/v1/messages":
+        assert out["system"] == "TEMPLATE"
+    elif path == "/v1/responses":
+        assert out["instructions"] == "TEMPLATE"
+    else:
+        assert out["messages"][0] == {"role": "system", "content": "TEMPLATE"}
+
+
+def test_rewrite_body_empty_override_keeps_no_prompt():
+    # An empty string means "no effective prompt": the truthiness check wins
+    # over the handwritten fallback, so a blank body never writes anything.
+    out = rewrite({"model": "m", "messages": [{"role": "user", "content": "hi"}]},
+                  make_endpoint(system_prompt="hand"), system_prompt="")
+    assert out == {"model": "m", "messages": [{"role": "user", "content": "hi"}]}

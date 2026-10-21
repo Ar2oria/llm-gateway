@@ -153,7 +153,8 @@ def _build_upstream_headers(client_headers: dict,
 def _rewrite_body(data: dict,
                   endpoint: EndpointConfig,
                   convert_stats: ConvertStats,
-                  extra_body: dict):
+                  extra_body: dict,
+                  system_prompt: str | None = None):
     """Rewrite the request body per model config, in place.
 
     `upstream_model` replaces the `model` field; `system_prompt` targets the
@@ -161,27 +162,33 @@ def _rewrite_body(data: dict,
     `instructions`, OpenAI the first `role: system` message (prepended if
     absent). `extra_body` (per-protocol) overrides fields after conversion,
     with a `null` value deleting the field (see the merge loop below).
+
+    `system_prompt` is the request-time override (the injected prompt
+    template's body). ``None`` falls back to ``endpoint.system_prompt``; an
+    empty string counts as "no prompt" — same truthiness the handwritten
+    prompt has always had, so a blank body can never blank out the config.
     """
 
     if endpoint.upstream_model:
         data["model"] = endpoint.upstream_model
 
+    effective_prompt = system_prompt if system_prompt is not None else endpoint.system_prompt
     final_protocol = convert_stats.target or convert_stats.source
-    if endpoint.system_prompt:
+    if effective_prompt:
         if final_protocol == Protocol.ANTHROPIC_MESSAGES:
-            data["system"] = endpoint.system_prompt
+            data["system"] = effective_prompt
         elif final_protocol == Protocol.OPENAI_RESPONSES:
-            data["instructions"] = endpoint.system_prompt
+            data["instructions"] = effective_prompt
         else:
             replaced = False
             for msg in data.get("messages", []):
                 if isinstance(msg, dict) and msg.get("role") == "system":
-                    msg["content"] = endpoint.system_prompt
+                    msg["content"] = effective_prompt
                     replaced = True
                     break
             if not replaced:
                 data.setdefault("messages", []).insert(
-                    0, {"role": "system", "content": endpoint.system_prompt}
+                    0, {"role": "system", "content": effective_prompt}
                 )
     if extra_body and convert_stats.need_convert():
         # Extra params win over converted defaults (e.g. a pinned
@@ -564,7 +571,18 @@ def build_app(
                 body = convert_request_body(convert_stats, data)
             except ConversionFailed as exc:
                 return error(400, str(exc))
-            _rewrite_body(body, endpoint, convert_stats, store.config.extra_body)
+            # Injected template body wins over endpoint.system_prompt; a
+            # missing/blank/unreadable template (get_prompt → None) falls
+            # back to the handwritten prompt inside _rewrite_body. Reads go
+            # through the store's in-memory cache, so only a cold miss
+            # touches the disk.
+            prompt_body = None
+            if endpoint.prompt_template:
+                prompt_body = app.state.prompt_templates.get_prompt(
+                    endpoint.prompt_template
+                )
+            _rewrite_body(body, endpoint, convert_stats, store.config.extra_body,
+                          system_prompt=prompt_body)
         if store.config.debug_log:
             _debug_log_request(origin_headers, headers, data, body)
 
