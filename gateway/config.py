@@ -64,6 +64,7 @@ class EndpointConfig:
     custom_headers: dict[str, str] = field(default_factory=dict)
     upstream_model: str | None = None
     system_prompt: str | None = None
+    prompt_template: str | None = None  # template NAME (not body); resolved per request by gateway.prompt_templates
     pricing: dict[str, float] | None = None
     protocol: str | None = None  # pinned protocol: "anthropic_messages" | "openai_chat" | "openai_responses"
     models_news: list[str] = field(default_factory=list)  # upstream ids flagged 模型上新; written by the watcher only
@@ -170,12 +171,20 @@ def validate_config(raw: dict) -> GatewayConfig:
                 raise ConfigError(
                     f"unknown protocol: {protocol} (expected one of {', '.join(PROTOCOL_VALUES)})"
                 )
+            prompt_template = model_entry.get("prompt_template")
+            if prompt_template is not None:
+                if not isinstance(prompt_template, str) or not prompt_template.strip():
+                    raise ConfigError("model 'prompt_template' must be a non-empty string")
+                if prompt_template in (".", "..") or "/" in prompt_template or "\\" in prompt_template:
+                    raise ConfigError(f"invalid prompt_template name: {prompt_template}")
+                prompt_template = prompt_template.strip()
             endpoints.append(EndpointConfig(
                 model=str(name),
                 base_url=base_url,
                 custom_headers=dict(headers),
                 upstream_model=str(model_entry["upstream_model"]) if model_entry.get("upstream_model") else None,
                 system_prompt=str(model_entry["system_prompt"]) if model_entry.get("system_prompt") else None,
+                prompt_template=prompt_template,
                 pricing=pricing,
                 protocol=str(protocol) if protocol else None,
                 models_news=models_news,
@@ -215,6 +224,8 @@ def config_to_dict(config: GatewayConfig) -> dict:
             model_entry["pricing"] = dict(ep.pricing)
         if ep.protocol:
             model_entry["protocol"] = ep.protocol
+        if ep.prompt_template:
+            model_entry["prompt_template"] = ep.prompt_template
         entry["models"].append(model_entry)
     return {
         "server": {

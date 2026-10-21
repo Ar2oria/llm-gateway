@@ -486,3 +486,40 @@ def test_config_to_dict_omits_empty_models_news():
     }
     d = config_to_dict(validate_config(raw))
     assert "models_news" not in d["endpoints"][0]
+
+
+def test_prompt_template_round_trips(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({
+        "server": {"api_key": "k"},
+        "endpoints": [{"base_url": "https://a.com", "models": [
+            {"name": "m1", "system_prompt": "hand", "prompt_template": "system-prompt"},
+        ]}],
+    }))
+    cfg = load_config(p)
+    assert cfg.endpoints[0].prompt_template == "system-prompt"
+    assert cfg.endpoints[0].system_prompt == "hand"      # 手写内容保留
+    out = config_to_dict(cfg)
+    model = out["endpoints"][0]["models"][0]
+    assert model["prompt_template"] == "system-prompt"
+    assert model["system_prompt"] == "hand"
+
+
+def test_prompt_template_absent_stays_absent():
+    cfg = validate_config({"server": {"api_key": "k"}, "endpoints": [
+        {"base_url": "https://a.com", "models": [{"name": "m1"}]}]})
+    assert cfg.endpoints[0].prompt_template is None
+    assert "prompt_template" not in config_to_dict(cfg)["endpoints"][0]["models"][0]
+
+
+@pytest.mark.parametrize("bad", ["", "  ", ".", "..", "a/b", "a\\b"])
+def test_prompt_template_rejects_illegal_names(bad):
+    with pytest.raises(ConfigError, match="prompt_template"):
+        validate_config({"server": {"api_key": "k"}, "endpoints": [
+            {"base_url": "https://a.com", "models": [{"name": "m1", "prompt_template": bad}]}]})
+
+
+def test_prompt_template_rejects_non_string():
+    with pytest.raises(ConfigError, match="prompt_template"):
+        validate_config({"server": {"api_key": "k"}, "endpoints": [
+            {"base_url": "https://a.com", "models": [{"name": "m1", "prompt_template": 5}]}]})
