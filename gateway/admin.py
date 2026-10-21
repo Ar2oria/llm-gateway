@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -10,6 +11,7 @@ from fastapi.responses import FileResponse
 
 from gateway.config import PROTOCOL_VALUES, ConfigError
 from gateway.fetch import FETCH_MODELS_TIMEOUT, FetchError, fetch_models
+from gateway.prompt_templates import DEFAULT_PROMPTS_DIR, HookError, PromptTemplateStore
 from gateway.store import ConfigStore, NO_PATH_MESSAGE, NotFoundError, StoreError, _UNSET
 from gateway.watcher import ModelWatcher, load_cache, save_cache
 
@@ -67,7 +69,11 @@ def _parse_pricing(payload: dict) -> dict[str, float] | None:
 def register_admin_routes(app: FastAPI, store: ConfigStore,
                           http_client: httpx.AsyncClient | None = None,
                           watcher_cache_path: str | Path | None = None,
-                          model_watcher: ModelWatcher | None = None) -> None:
+                          model_watcher: ModelWatcher | None = None,
+                          prompt_store: PromptTemplateStore | None = None) -> None:
+    if prompt_store is None:
+        prompt_store = PromptTemplateStore(DEFAULT_PROMPTS_DIR)
+
     @app.api_route("/admin", methods=["GET"])
     async def admin_page() -> FileResponse:
         return FileResponse(ADMIN_HTML, headers={"Cache-Control": "no-store"})
@@ -183,7 +189,13 @@ def register_admin_routes(app: FastAPI, store: ConfigStore,
         except ValueError as exc:
             return _error(400, str(exc))
         upstream_model = payload.get("upstream_model") or None
-        system_prompt = payload.get("system_prompt") or None
+        # Absent key must mean "leave it alone" (the read-only edit dialog omits
+        # system_prompt so the handwritten text survives); an explicit empty
+        # value still clears it — mirroring the protocol handling below.
+        system_prompt = (
+            (payload.get("system_prompt") or None)
+            if "system_prompt" in payload else _UNSET
+        )
         protocol = payload.get("protocol") if "protocol" in payload else _UNSET
         try:
             ep = store.update_model(base_url, name, upstream_model, system_prompt, pricing, protocol)
@@ -209,6 +221,71 @@ def register_admin_routes(app: FastAPI, store: ConfigStore,
         except StoreError as exc:
             return _error(503, str(exc))
         return Response(status_code=204)
+
+    @app.api_route("/admin/api/prompt-templates", methods=["GET"])
+    async def list_prompt_templates() -> Response:
+        return _json_response({"templates": prompt_store.list_templates()})
+
+    @app.api_route("/admin/api/endpoints/models/prompt-template", methods=["POST"])
+    async def inject_prompt_template(payload: dict) -> Response:
+        """Swap the model's effective system prompt for a prompt template.
+
+        The hook runs *before* the config write (a failing hook must never leave
+        a half-injected model behind) and off the event loop — run_load_hook
+        blocks for up to HOOK_TIMEOUT. Failure clears any template name already
+        on the model; the handwritten system_prompt is never touched."""
+        guard = _write_guard(store)
+        if guard is not None:
+            return guard
+        base_url = payload.get("base_url")
+        name = payload.get("name")
+        template = payload.get("template")
+        if not base_url or not name or not template:
+            return _error(400, "base_url, name and template are required")
+        try:
+            model = _model_payload(store, str(base_url), str(name))
+        except NotFoundError as exc:
+            return _error(404, str(exc))
+        if model.get("prompt_template"):
+            return _error(409, "model is already injected; cancel the injection first")
+        if str(template) not in prompt_store.list_templates():
+            return _error(400, f"unknown prompt template: {template}")
+        try:
+            await asyncio.to_thread(prompt_store.run_load_hook, str(template))
+        except HookError as exc:
+            try:
+                store.set_prompt_template(str(base_url), str(name), None)
+            except StoreError:
+                pass
+            return _error(502, f"load_prompt 执行失败：{exc}；已清除注入")
+        prompt_store.preload(str(template))
+        try:
+            store.set_prompt_template(str(base_url), str(name), str(template))
+        except NotFoundError as exc:
+            return _error(404, str(exc))
+        except StoreError as exc:
+            return _error(503, str(exc))
+        return _json_response(_model_payload(store, str(base_url), str(name)))
+
+    @app.api_route("/admin/api/endpoints/models/prompt-template", methods=["DELETE"])
+    async def uninject_prompt_template(base_url: str | None = None,
+                                       name: str | None = None) -> Response:
+        guard = _write_guard(store)
+        if guard is not None:
+            return guard
+        if not base_url or not name:
+            return _error(400, "base_url and name query parameters are required")
+        try:
+            model = _model_payload(store, base_url, name)
+        except NotFoundError as exc:
+            return _error(404, str(exc))
+        if not model.get("prompt_template"):
+            return Response(status_code=204)
+        try:
+            store.set_prompt_template(base_url, name, None)
+        except StoreError as exc:
+            return _error(503, str(exc))
+        return _json_response({"name": name, "prompt_template": None})
 
     @app.api_route("/admin/api/extra-body", methods=["GET"])
     async def get_extra_body() -> Response:

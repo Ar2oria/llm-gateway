@@ -12,7 +12,7 @@ def _enc(s: str) -> str:
     return quote(s, safe="")
 
 
-def make_app(tmp_path, config_path=True, captures=None):
+def make_app(tmp_path, config_path=True, captures=None, prompts_dir=None):
     p = tmp_path / "config.json"
     p.write_text(json.dumps({
         "server": {"api_key": "k"},
@@ -45,7 +45,8 @@ def make_app(tmp_path, config_path=True, captures=None):
     # explicit tmp cache keeps build_app's default (/tmp/llm-gateway-models-cache.json)
     # out of the tests
     app = build_app(config, client=http_client, config_path=path,
-                    watcher_cache_path=tmp_path / "watcher-cache.json" if path else None)
+                    watcher_cache_path=tmp_path / "watcher-cache.json" if path else None,
+                    prompts_dir=prompts_dir)
     return TestClient(app), p
 
 
@@ -838,3 +839,119 @@ def test_admin_page_persists_requests_filters(tmp_path):
     assert "decodeRequestsState" in html
     assert "restoreRequestsState()" in html
     assert "persistRequestsState()" in html
+
+
+def _prompts_dir(tmp_path, hook_body=None):
+    root = tmp_path / "prompts"
+    d = root / "system-prompt"
+    d.mkdir(parents=True)
+    (d / "prompt.md").write_text("TEMPLATE", encoding="utf-8")
+    (root / "empty").mkdir()
+    if hook_body is not None:
+        (d / "prompt.py").write_text(hook_body, encoding="utf-8")
+    return root
+
+
+def test_list_prompt_templates(tmp_path):
+    client, _ = make_app(tmp_path, prompts_dir=_prompts_dir(tmp_path))
+    resp = client.get("/admin/api/prompt-templates")
+    assert resp.status_code == 200
+    assert resp.json() == {"templates": ["system-prompt"]}
+
+
+def test_inject_prompt_template_success(tmp_path):
+    prompts = _prompts_dir(tmp_path, "def load_prompt():\n    return 0\n")
+    client, p = make_app(tmp_path, prompts_dir=prompts)
+    resp = client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example",
+                             "name": "gpt-4o", "template": "system-prompt"})
+    assert resp.status_code == 200
+    assert resp.json()["prompt_template"] == "system-prompt"
+    data = json.loads(p.read_text())
+    m = data["endpoints"][0]["models"][0]
+    assert m["prompt_template"] == "system-prompt"
+
+
+def test_inject_failure_clears_template_and_returns_502(tmp_path):
+    prompts = _prompts_dir(tmp_path, "def load_prompt():\n    return 7\n")
+    client, p = make_app(tmp_path, prompts_dir=prompts)
+    client.put("/admin/api/endpoints/models?base_url=https%3A%2F%2Fupstream.example&name=gpt-4o",
+               json={"system_prompt": "hand"})
+    resp = client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example",
+                             "name": "gpt-4o", "template": "system-prompt"})
+    assert resp.status_code == 502
+    assert "已清除注入" in resp.json()["error"]["message"]
+    m = json.loads(p.read_text())["endpoints"][0]["models"][0]
+    assert "prompt_template" not in m
+    assert m["system_prompt"] == "hand"      # 手写内容不受影响
+
+
+def test_inject_rejects_unknown_template(tmp_path):
+    client, _ = make_app(tmp_path, prompts_dir=_prompts_dir(tmp_path))
+    resp = client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example",
+                             "name": "gpt-4o", "template": "empty"})
+    assert resp.status_code == 400
+
+
+def test_inject_unknown_model_is_404_and_never_runs_hook(tmp_path):
+    marker = tmp_path / "ran.txt"
+    prompts = _prompts_dir(
+        tmp_path,
+        "import pathlib\ndef load_prompt():\n"
+        "    pathlib.Path(%r).write_text('x')\n    return 0\n" % str(marker))
+    client, _ = make_app(tmp_path, prompts_dir=prompts)
+    resp = client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example",
+                             "name": "nope", "template": "system-prompt"})
+    assert resp.status_code == 404
+    assert not marker.exists()
+
+
+def test_inject_twice_is_409(tmp_path):
+    client, _ = make_app(tmp_path, prompts_dir=_prompts_dir(tmp_path))
+    body = {"base_url": "https://upstream.example", "name": "gpt-4o", "template": "system-prompt"}
+    assert client.post("/admin/api/endpoints/models/prompt-template", json=body).status_code == 200
+    assert client.post("/admin/api/endpoints/models/prompt-template", json=body).status_code == 409
+
+
+def test_uninject_restores_handwritten_prompt(tmp_path):
+    client, p = make_app(tmp_path, prompts_dir=_prompts_dir(tmp_path))
+    client.put("/admin/api/endpoints/models?base_url=https%3A%2F%2Fupstream.example&name=gpt-4o",
+               json={"upstream_model": None, "system_prompt": "hand"})
+    assert client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example", "name": "gpt-4o",
+                             "template": "system-prompt"}).status_code == 200
+    resp = client.delete("/admin/api/endpoints/models/prompt-template"
+                         "?base_url=https%3A%2F%2Fupstream.example&name=gpt-4o")
+    assert resp.status_code == 200
+    assert resp.json()["prompt_template"] is None
+    m = json.loads(p.read_text())["endpoints"][0]["models"][0]
+    assert m["system_prompt"] == "hand"
+    assert "prompt_template" not in m
+
+
+def test_uninject_when_not_injected_is_204(tmp_path):
+    client, _ = make_app(tmp_path, prompts_dir=_prompts_dir(tmp_path))
+    resp = client.delete("/admin/api/endpoints/models/prompt-template"
+                         "?base_url=https%3A%2F%2Fupstream.example&name=gpt-4o")
+    assert resp.status_code == 204
+
+
+def test_prompt_template_writes_503_in_read_only_mode(tmp_path):
+    client, _ = make_app(tmp_path, config_path=False, prompts_dir=_prompts_dir(tmp_path))
+    assert client.post("/admin/api/endpoints/models/prompt-template",
+                       json={"base_url": "https://upstream.example", "name": "gpt-4o",
+                             "template": "system-prompt"}).status_code == 503
+
+
+def test_put_model_without_system_prompt_key_keeps_handwritten(tmp_path):
+    client, p = make_app(tmp_path, prompts_dir=_prompts_dir(tmp_path))
+    client.put("/admin/api/endpoints/models?base_url=https%3A%2F%2Fupstream.example&name=gpt-4o",
+               json={"system_prompt": "hand"})
+    client.put("/admin/api/endpoints/models?base_url=https%3A%2F%2Fupstream.example&name=gpt-4o",
+               json={"upstream_model": "real"})
+    m = json.loads(p.read_text())["endpoints"][0]["models"][0]
+    assert m["system_prompt"] == "hand"
+    assert m["upstream_model"] == "real"

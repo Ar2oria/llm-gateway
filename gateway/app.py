@@ -30,6 +30,7 @@ from gateway.convert import (
     ConvertStats,
     Protocol
 )
+from gateway.prompt_templates import DEFAULT_PROMPTS_DIR, PromptTemplateStore
 from gateway.stats.api import register_stats_routes
 from gateway.stats.capture import SseUsageScanner, Usage, extract_usage
 from gateway.stats.db import StatsDb
@@ -399,6 +400,7 @@ def build_app(
     stats_db_path: str | Path | None = None,
     watcher_cache_path: str | Path | None = None,
     watcher_interval: float = 12 * 3600,
+    prompts_dir: str | Path | None = None,
 ) -> FastAPI:
 
     logger.setLevel(logging.INFO)
@@ -470,6 +472,12 @@ def build_app(
     app.state.cost_worker = cost_worker
     app.state.model_watcher = model_watcher
     app.state.watcher_cache_path = watcher_cache
+    # Template body reads are lazy, so a missing/broken prompt store never
+    # fails boot. Task 6 (proxy path) reuses this same object.
+    prompt_store = PromptTemplateStore(
+        prompts_dir if prompts_dir is not None else DEFAULT_PROMPTS_DIR
+    )
+    app.state.prompt_templates = prompt_store
 
     def error(status: int, message: str) -> Response:
         return Response(
@@ -490,7 +498,8 @@ def build_app(
 
     register_admin_routes(app, store, http_client=http_client,
                           watcher_cache_path=watcher_cache,
-                          model_watcher=model_watcher)
+                          model_watcher=model_watcher,
+                          prompt_store=prompt_store)
     register_stats_routes(app, stats_db)
 
     @app.api_route(
