@@ -79,6 +79,9 @@ def test_admin_page_wires_prompt_template_ui(tmp_path):
     assert "/admin/api/endpoints/models/prompt-template" in html
     assert "promptButtonLabel" in html
     assert "modelPromptCellText" in html
+    # 两张表都要接上：模型页（model/baseUrl）与接入点展开表（m/ep.base_url）
+    assert 'actionBtn(promptButtonLabel(model), () => togglePromptTemplate(baseUrl, model))' in html
+    assert 'actionBtn(promptButtonLabel(m), () => togglePromptTemplate(ep.base_url, m))' in html
 
 
 def test_admin_page_persists_tab_in_url_hash(tmp_path):

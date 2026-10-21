@@ -688,6 +688,14 @@ async function togglePromptTemplate(baseUrl, model) {
   openInjectPromptModal(baseUrl, model);
 }
 
+// 注入请求是异步的：等回来时弹窗可能已被遮罩关闭，甚至被另一个弹窗顶替
+// （showModal 换掉 innerHTML，但 overlay 仍是 shown）。只有状态节点 still
+// 挂在当前文档里、且确实是这一个弹窗的那份，才允许继续改动它。
+function promptModalAlive(status) {
+  return overlay.classList.contains("show") && status.isConnected &&
+         document.getElementById("pt-status") === status;
+}
+
 async function openInjectPromptModal(baseUrl, model) {
   let templates = [];
   try {
@@ -723,15 +731,18 @@ async function openInjectPromptModal(baseUrl, model) {
         base_url: baseUrl, name: model.name,
         template: document.getElementById("pt-select").value,
       });
-      status.textContent = "完成";
       await loadEndpoints();
+      if (!promptModalAlive(status)) return;   // 请求途中点了遮罩关闭：别动已卸载的节点
+      status.textContent = "完成";
       setTimeout(closeModal, 400);
     } catch (err) {
+      await loadEndpoints();     // 刷新以同步按钮状态（502 钩子失败已清注入，409 说明其实已注入）
+      // 弹窗已被关闭、或已被别的弹窗顶替：不能改那边的按钮状态
+      if (!promptModalAlive(status)) return;
       status.style.color = "var(--danger)";
       status.textContent = err.message;
       save.disabled = false;
       document.getElementById("modal-cancel").disabled = false;
-      await loadEndpoints();     // 刷新以同步按钮状态（502 钩子失败已清注入，409 说明其实已注入）
     }
   });
 }

@@ -29,6 +29,7 @@ node tests/bucket_test.mjs                        # JS: admin.html minute-bucket
 node tests/curl_test.mjs                          # JS: admin.html copy-curl command builder (NOT run by pytest)
 node tests/tab_test.mjs                           # JS: admin.html URL-hash tab persistence (NOT run by pytest)
 node tests/models_sort_test.mjs                   # JS: admin.html models-tab sorting (NOT run by pytest)
+node tests/prompt_template_test.mjs               # JS: admin.html prompt-template cell/button helpers (NOT run by pytest)
 node tests/models_news_test.mjs / node tests/reqstate_test.mjs                   # JS: admin.html model-news badge helpers (NOT run by pytest)
 node tests/pick_test.mjs                          # JS: admin.html fetch-models picker helpers (NOT run by pytest)
 ```

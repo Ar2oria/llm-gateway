@@ -10,7 +10,7 @@
 
 - `uv run pytest -v` — all tests, no network (upstream mocked via `httpx.MockTransport` + `TestClient`, see `tests/test_app.py:make_client`).
 - `uv run pytest tests/test_app.py -k sse -v` — filter by name; `uv run pytest tests/test_config.py -v` — single file.
-- `node tests/bucket_test.mjs` / `node tests/curl_test.mjs` / `node tests/tab_test.mjs` / `node tests/models_sort_test.mjs` / `node tests/models_news_test.mjs / node tests/reqstate_test.mjs` — JS tests of admin.html helpers (minute-bucketing, copy-curl builder, URL-hash tab persistence, models-tab sorting, model-news badge; extracted from `<script>` marker comments; NOT run by pytest).
+- `node tests/bucket_test.mjs` / `node tests/curl_test.mjs` / `node tests/tab_test.mjs` / `node tests/models_sort_test.mjs` / `node tests/prompt_template_test.mjs` / `node tests/models_news_test.mjs / node tests/reqstate_test.mjs` — JS tests of admin.html helpers (minute-bucketing, copy-curl builder, URL-hash tab persistence, models-tab sorting, prompt-template cell/button helpers, model-news badge; extracted from `<script>` marker comments; NOT run by pytest).
 - Test ↔ source mirror: `test_app.py`→`app.py` (+`test_app_helpers.py` for `_build_upstream_headers`/`_rewrite_body`), `test_config.py`→`config.py`, `test_convert.py`→`convert.py`+`converter/`, `test_store.py`→`store.py`, `test_admin.py`→`admin.py`, `test_menubar.py`→`menubar.py`, `test_fetch.py`+`test_watcher.py`→`fetch.py`+`watcher.py`, `test_stats_*.py`→`stats/`.
 
 ## Config
