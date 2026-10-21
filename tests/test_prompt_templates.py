@@ -2,7 +2,7 @@ import pathlib
 
 import pytest
 
-from gateway.prompt_templates import PromptTemplateStore
+from gateway.prompt_templates import HookError, PromptTemplateStore
 
 
 def make_root(tmp_path):
@@ -107,3 +107,72 @@ def test_preload_reports_whether_prompt_is_available(tmp_path):
     store = PromptTemplateStore(root)
     assert store.preload("alpha") is True
     assert store.preload("no-md") is False
+
+
+def _template_with_py(tmp_path, body):
+    root = tmp_path / "prompts"
+    d = root / "tpl"
+    d.mkdir(parents=True)
+    (d / "prompt.md").write_text("P", encoding="utf-8")
+    (d / "prompt.py").write_text(body, encoding="utf-8")
+    return root
+
+
+def test_hook_missing_py_is_success(tmp_path):
+    root = make_root(tmp_path)                      # alpha 只有 prompt.md
+    PromptTemplateStore(root).run_load_hook("alpha")  # 不抛异常即通过
+
+
+def test_hook_zero_return_is_success_and_runs_in_template_dir(tmp_path):
+    root = _template_with_py(tmp_path,
+        "import pathlib\n"
+        "def load_prompt():\n"
+        "    pathlib.Path('ran.txt').write_text('yes', encoding='utf-8')\n"
+        "    return 0\n")
+    PromptTemplateStore(root).run_load_hook("tpl")
+    assert (root / "tpl" / "ran.txt").read_text(encoding="utf-8") == "yes"
+
+
+def test_hook_non_int_return_is_success(tmp_path):
+    root = _template_with_py(tmp_path, "def load_prompt():\n    return None\n")
+    PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_nonzero_return_raises(tmp_path):
+    root = _template_with_py(tmp_path, "def load_prompt():\n    return 3\n")
+    with pytest.raises(HookError, match="3"):
+        PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_exception_raises_with_stderr(tmp_path):
+    root = _template_with_py(tmp_path,
+        "def load_prompt():\n    raise RuntimeError('boom-marker')\n")
+    with pytest.raises(HookError, match="boom-marker"):
+        PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_syntax_error_raises(tmp_path):
+    root = _template_with_py(tmp_path, "def load_prompt(:\n")
+    with pytest.raises(HookError):
+        PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_missing_function_raises(tmp_path):
+    root = _template_with_py(tmp_path, "def other():\n    return 0\n")
+    with pytest.raises(HookError, match="load_prompt"):
+        PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_timeout_raises(tmp_path, monkeypatch):
+    import gateway.prompt_templates as pt
+    monkeypatch.setattr(pt, "HOOK_TIMEOUT", 0.2)
+    root = _template_with_py(tmp_path,
+        "import time\ndef load_prompt():\n    time.sleep(5)\n    return 0\n")
+    with pytest.raises(HookError, match="超时|timeout"):
+        PromptTemplateStore(root).run_load_hook("tpl")
+
+
+def test_hook_illegal_name_raises_without_spawn(tmp_path):
+    store = PromptTemplateStore(make_root(tmp_path))
+    with pytest.raises(HookError):
+        store.run_load_hook("../alpha")

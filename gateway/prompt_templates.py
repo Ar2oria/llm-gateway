@@ -8,12 +8,53 @@ missing or broken template can never fail the gateway boot.
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 import threading
 from pathlib import Path
 
 DEFAULT_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 PROMPT_FILENAME = "prompt.md"
+
+HOOK_FILENAME = "prompt.py"
+
+HOOK_TIMEOUT: float = 30.0
+
+# 子进程侧的最小 runner：用 runpy 执行模板脚本，再调用它定义的 load_prompt。
+# 结果以 __HOOK_RESULT__ 前缀的 JSON 行回报（取最后一行），标准输入关闭、
+# -I 隔离环境，脚本自身抛异常时靠非零退出码 + stderr 回溯来定位。
+_RUNNER = (
+    "import json, runpy, sys\n"
+    "ns = runpy.run_path(sys.argv[1], run_name='__main__')\n"
+    "fn = ns.get('load_prompt')\n"
+    "if not callable(fn):\n"
+    "    print('__HOOK_RESULT__' + json.dumps({'ok': False, 'error': 'load_prompt not defined'}))\n"
+    "else:\n"
+    "    print('__HOOK_RESULT__' + json.dumps({'ok': True, 'result': None}))\n"
+    "    r = fn()\n"
+    "    ok = (not isinstance(r, int)) or isinstance(r, bool) or r == 0\n"
+    "    print('__HOOK_RESULT__' + json.dumps({'ok': ok, 'result': r if isinstance(r, int) else None}))\n"
+)
+
+_RESULT_MARKER = "__HOOK_RESULT__"
+
+
+class HookError(Exception):
+    """模板 ``prompt.py`` 的 ``load_prompt`` 钩子执行失败。"""
+
+
+def _parse_hook_result(stdout: str) -> dict | None:
+    """取最后一行 ``__HOOK_RESULT__`` 标记并解析其 JSON；拿不到或解析失败返回 None。"""
+    for line in reversed((stdout or "").splitlines()):
+        if line.startswith(_RESULT_MARKER):
+            try:
+                payload = json.loads(line[len(_RESULT_MARKER):])
+            except ValueError:
+                return None
+            return payload if isinstance(payload, dict) else None
+    return None
 
 
 def _is_valid_name(name: str) -> bool:
@@ -81,3 +122,42 @@ class PromptTemplateStore:
         with self._lock:
             if self._cache.get(name, "missing") is None:
                 del self._cache[name]
+
+    def run_load_hook(self, name: str) -> None:
+        """执行模板目录下的 ``prompt.py`` 钩子的 ``load_prompt()``。
+
+        - 没有 ``prompt.py``：直接返回（钩子可选）。
+        - 名字非法：在起子进程之前就抛 ``HookError``。
+        - 返回非 ``int``（含 ``None``）、或 ``True``、或 ``0``：成功。
+        - 返回非 0 整数、未定义函数、抛异常/语法错、非零退出、超时：抛
+          ``HookError``，消息带上 stderr 尾部供 admin UI 展示。
+        """
+        if not _is_valid_name(name):
+            raise HookError(f"非法的模板名: {name!r}")
+        script = self._root / name / HOOK_FILENAME
+        if not script.is_file():
+            return
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-I", "-B", "-c", _RUNNER, str(script)],
+                cwd=str(script.parent),
+                capture_output=True,
+                text=True,
+                timeout=HOOK_TIMEOUT,
+                stdin=subprocess.DEVNULL,
+            )
+        except subprocess.TimeoutExpired:
+            raise HookError(f"load_prompt 超时（> {HOOK_TIMEOUT:g}s）") from None
+        except OSError as exc:
+            raise HookError(f"load_prompt 无法启动：{exc}") from exc
+        stderr_tail = (completed.stderr or "")[-500:]
+        if completed.returncode != 0:
+            raise HookError(f"load_prompt 执行失败：{stderr_tail}")
+        payload = _parse_hook_result(completed.stdout)
+        if payload is None:
+            raise HookError(f"load_prompt 输出无法解析：{stderr_tail}")
+        if not payload.get("ok"):
+            raise HookError(
+                payload.get("error")
+                or f"load_prompt 返回非 0 值 {payload.get('result')}"
+            )
