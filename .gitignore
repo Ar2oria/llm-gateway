@@ -12,3 +12,6 @@ usage.db-shm
 # Build artifacts
 dist/
 docs/superpowers
+
+# ds-purge 的正文由 prompt.py 钩子从内嵌 base64 生成，不入库
+prompts/ds-purge/prompt.md

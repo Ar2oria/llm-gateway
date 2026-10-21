@@ -10,6 +10,7 @@
 
 - **协议转换** —— OpenAI Chat、OpenAI Responses、Anthropic Messages 三种协议互通，支持全部 12 个方向。模型可固定为任一协议，客户端使用其他协议也能正常工作。
 - **模型路由** —— 模型名精确匹配到上游，可为每个模型单独设置映射后的模型名和系统提示词。
+- **提示词模板** —— 从 `prompts/` 目录**动态加载**提示词模板，一键注入到任意模型替换其系统提示词；模板正文可由 `prompt.py` 钩子生成（内置 **ds-purge**：DeepSeek 模型破甲提示词）。
 - **网页管理** —— 在浏览器中管理端点和模型，修改立即生效，无需重启。
 - **用量统计** —— 记录每次请求的 token 消耗、成本、TTFT 和解码速度，数据存储于本地 SQLite。
 - **可复用的 SDK** —— 协议转换核心已抽离为独立包 [`apicompat`](#apicompatpython-sdk)，可直接用于其他项目。
@@ -133,6 +134,44 @@ experimental_bearer_token = "apikey"
 | 单接入点统计 | 请求明细 |
 | <img src="docs/images/start2.png" width="420"> | <img src="docs/images/start3.png" width="420"> |
 
+## 提示词模板
+
+除了给每个模型手写系统提示词，还可以把提示词做成**模板目录**，在管理界面里一键注入。
+
+```
+prompts/
+├── claude-simple/       # 只有 prompt.md：直接作为正文
+│   └── prompt.md
+└── ds-purge/            # 只有 prompt.py：钩子生成正文（内置 DeepSeek 破甲提示词）
+    └── prompt.py
+```
+
+**动态加载**：`prompts/` 下每个子目录都会被扫描成模板名，**新增模板不需要改代码、不需要重启**——刷新管理界面就能在注入弹窗里选到。目录里真实有什么文件也无所谓：只有 `prompt.md` 就直接用；只有 `prompt.py` 就先执行它的 `load_prompt()` 钩子，再读钩子生成的 `prompt.md`；两个都有则以 `prompt.md` 为准。
+
+在模型的编辑弹窗里点「注入提示词」即可选择模板。注入后该模型的系统提示词改由模板正文提供（编辑框会变成只读的模板标签），「取消注入」会恢复原来的手写提示词。
+
+### 内置模板：ds-purge
+
+仓库自带 `prompts/ds-purge/`，是给 **DeepSeek 模型**用的破甲提示词。它的正文以 base64 内嵌在 `prompt.py` 里，钩子被调用时解码并生成 `prompt.md`，因此纯文本模板不易被编辑器换行、不可见字符之类的问题破坏。
+
+用法：在管理界面给某个 deepseek 模型点「注入提示词」→ 选 `ds-purge`。也可以直接写进配置：
+
+```json
+{
+  "models": [
+    { "name": "deepseek-v4.1-flash-purge", "upstream_model": "deepseek-v4.1-flash", "prompt_template": "ds-purge" }
+  ]
+}
+```
+
+### 自定义模板
+
+```bash
+mkdir -p prompts/my-template
+$EDITOR prompts/my-template/prompt.md     # 方式一：直接写正文
+$EDITOR prompts/my-template/prompt.py     # 方式二：钩子生成正文
+```
+
 
 ## apicompat（Python SDK）
 
@@ -162,7 +201,8 @@ for chunk in convert_stream("openai_responses", "anthropic_messages", upstream_c
 
 | | |
 |---|---|
-| [README.md](README.md) | English |
+| [README.en.md](README.en.md) | English |
+| [prompts/README.md](prompts/README.md) | 提示词模板的完整约定（钩子返回值、运行环境、加载时机） |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 完整配置项、管理 API、统计口径、架构说明（面向开发者） |
 | [packages/apicompat/README.md](packages/apicompat/README.md) | SDK 的 API 参考 |
 
