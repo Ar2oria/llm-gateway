@@ -474,6 +474,15 @@ def test_admin_page_has_stats_tab(tmp_path):
     assert 'src="/static/chart.umd.min.js"' in resp.text
 
 
+def test_admin_page_has_request_protocol_and_effort_columns(tmp_path):
+    client, _ = make_app(tmp_path)
+    html = client.get("/admin").text
+    assert "协议（请求 → 实际）" in html
+    assert "思考强度" in html
+    assert "protocolFlowLabel(it)" in html
+    assert "reasoningEffortLabel(it)" in html
+
+
 def test_model_pricing_invalid_400(tmp_path):
     client, p = make_app(tmp_path)
     resp = client.post("/admin/api/endpoints/models?base_url=" + _enc("https://upstream.example"),

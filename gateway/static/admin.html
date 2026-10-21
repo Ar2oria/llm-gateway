@@ -87,6 +87,9 @@
   .req-time-group { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
   .requests-totals-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
   .requests-totals-row .req-query-btn { margin-left: auto; margin-right: 24px; }
+  #requests-table-wrap { overflow-x: auto; }
+  #requests-table-wrap table { min-width: 1120px; }
+  #requests-table-wrap .protocol-cell { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
   #list-content th.sortable { cursor: pointer; user-select: none; }
   #list-content th.sortable:hover { color: var(--accent); }
   .requests-pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 10px; font-size: 13px; color: var(--muted); }
@@ -2013,6 +2016,21 @@ function renderRequestsTotals(totals) {
     " · 总命中率: <b>" + ((totals.cache_hit_rate || 0) * 100).toFixed(1) + "%</b>";
 }
 
+// REQUESTS-DETAIL-START
+function protocolFlowLabel(item) {
+  const client = String(item && item.client_protocol || "").trim();
+  const upstream = String(item && item.upstream_protocol || "").trim();
+  if (!client && !upstream) return "—";
+  if (!client || !upstream) return client || upstream;
+  return client + " → " + upstream;
+}
+
+function reasoningEffortLabel(item) {
+  const effort = String(item && item.reasoning_effort || "").trim();
+  return effort || "—";
+}
+// REQUESTS-DETAIL-END
+
 function renderRequestsTable(items) {
   const wrap = document.getElementById("requests-table-wrap");
   if (items.length === 0) {
@@ -2020,7 +2038,7 @@ function renderRequestsTable(items) {
   } else {
     const table = document.createElement("table");
     const thead = document.createElement("thead");
-    thead.innerHTML = "<tr><th>时间</th><th>接入点</th><th>模型</th><th>输入</th><th>缓存读</th><th>缓存写</th><th>输出</th><th>状态</th><th>成本</th></tr>";
+    thead.innerHTML = "<tr><th>时间</th><th>接入点</th><th>模型</th><th>协议（请求 → 实际）</th><th>思考强度</th><th>输入</th><th>缓存读</th><th>缓存写</th><th>输出</th><th>状态</th><th>成本</th></tr>";
     table.appendChild(thead);
     const tbody = document.createElement("tbody");
     for (const it of items) {
@@ -2031,13 +2049,16 @@ function renderRequestsTable(items) {
         + ":" + String(ts.getMinutes()).padStart(2, "0") + ":" + String(ts.getSeconds()).padStart(2, "0");
       const cells = [
         timeStr, it.base_url, it.model,
+        protocolFlowLabel(it), reasoningEffortLabel(it),
         String(it.input_tokens), String(it.cache_read_tokens), String(it.cache_write_tokens),
         String(it.output_tokens), String(it.status),
         it.cost_usd === null ? "—" : "$" + it.cost_usd.toFixed(4),
       ];
-      for (const c of cells) {
+      for (let i = 0; i < cells.length; i++) {
+        const c = cells[i];
         const td = document.createElement("td");
         td.textContent = c;
+        if (i === 3 || i === 4) td.className = "protocol-cell";
         tr.appendChild(td);
       }
       tbody.appendChild(tr);

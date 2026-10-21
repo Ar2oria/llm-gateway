@@ -1487,6 +1487,59 @@ def test_anthropic_to_openai_chat_request_converted_and_response_converted():
     assert data["stop_reason"] == "end_turn"
 
 
+def test_usage_record_captures_protocol_flow_and_final_reasoning_effort(tmp_path):
+    """Usage details must describe the request actually sent upstream:
+    client protocol -> pinned protocol, plus the final effort after extra_body
+    overrides (not merely the client-supplied value)."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["reasoning_effort"] == "high"
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "id": "chatcmpl-up",
+                "object": "chat.completion",
+                "model": "gpt-upstream",
+                "choices": [{"index": 0,
+                             "message": {"role": "assistant", "content": "hi"},
+                             "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2,
+                          "total_tokens": 6},
+            },
+        )
+
+    config = GatewayConfig(
+        host="127.0.0.1", port=8080, api_key="local-secret",
+        extra_body={"openai_chat": {"reasoning_effort": "high"}},
+        endpoints=[EndpointConfig(
+            model="anth-to-oa",
+            base_url="https://upstream.example",
+            protocol="openai_chat",
+        )],
+    )
+    app = build_app(
+        config,
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        stats_db_path=tmp_path / "usage.db",
+    )
+    client = TestClient(app)
+
+    resp = client.post("/v1/messages", json={
+        "model": "anth-to-oa",
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 50,
+        "output_config": {"effort": "low"},
+    })
+    assert resp.status_code == 200
+
+    items, _ = app.state.stats_db.list_requests(0, 2**31, None, None, 10, 0)
+    assert len(items) == 1
+    assert items[0]["client_protocol"] == "anthropic_messages"
+    assert items[0]["upstream_protocol"] == "openai_chat"
+    assert items[0]["reasoning_effort"] == "high"
+
+
 def test_converting_request_missing_max_tokens_defaults_and_forwards():
     """A missing max_tokens defaults to 8192 (sub2api) instead of failing —
     the upstream still receives a valid Anthropic request."""

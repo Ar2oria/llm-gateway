@@ -198,6 +198,38 @@ def _rewrite_body(data: dict,
                 else:
                     data[key] = value
 
+
+def _reasoning_effort(data: dict) -> str | None:
+    """Return the reasoning effort explicitly present in the final upstream body."""
+    effort = data.get("reasoning_effort")
+    if isinstance(effort, str) and effort:
+        return effort
+
+    reasoning = data.get("reasoning")
+    if isinstance(reasoning, dict):
+        effort = reasoning.get("effort")
+        if isinstance(effort, str) and effort:
+            return effort
+
+    output_config = data.get("output_config")
+    if isinstance(output_config, dict):
+        effort = output_config.get("effort")
+        if isinstance(effort, str) and effort:
+            return effort
+
+    thinking = data.get("thinking")
+    if isinstance(thinking, dict):
+        thinking_type = thinking.get("type")
+        if thinking_type == "disabled":
+            return "none"
+        if thinking_type == "adaptive":
+            return "adaptive"
+        budget = thinking.get("budget_tokens")
+        if isinstance(budget, (int, float)) and not isinstance(budget, bool) and budget > 0:
+            return f"budget:{int(budget)}"
+    return None
+
+
 def _debug_log_request(client_headers: dict, final_headers: dict,
                        client_body: dict, final_body: dict) -> None:
     """Log the full incoming request (bodies pretty-printed when JSON).
@@ -228,6 +260,9 @@ class _UsageCapture:
     start_time: float
     status: int
     decomp: tuple[Callable[[bytes], bytes], Callable[[], bytes]] | None
+    client_protocol: str | None
+    upstream_protocol: str | None
+    reasoning_effort: str | None
 
     @property
     def active(self) -> bool:
@@ -275,6 +310,9 @@ class _UsageCapture:
                 status=self.status,
                 duration_ms=duration_ms,
                 ttft_ms=ttft_ms,
+                client_protocol=self.client_protocol,
+                upstream_protocol=self.upstream_protocol,
+                reasoning_effort=self.reasoning_effort,
             )
         except Exception:
             logger.exception("failed to record usage stats")
@@ -544,6 +582,9 @@ def build_app(
             status=upstream_resp.status_code,
             decomp=(_decompressor(upstream_resp.headers.get("content-encoding", ""))
                     if stats_db is not None else None),
+            client_protocol=convert_stats.source.value,
+            upstream_protocol=(convert_stats.target or convert_stats.source).value,
+            reasoning_effort=_reasoning_effort(body),
         )
 
         resp_headers = {

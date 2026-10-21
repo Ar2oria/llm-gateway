@@ -232,6 +232,11 @@ Capture failures never break proxying.
 Recording is format-agnostic: all three protocols are handled, including
 streaming (Responses usage arrives in the final `response.completed` event, and
 its `input_tokens_details.cached_tokens` is split into cache-read).
+Each request row also records `client_protocol` → `upstream_protocol` and the
+final reasoning effort present after conversion and `extra_body` overrides
+(`reasoning_effort`, `reasoning.effort`, `output_config.effort`, or Anthropic
+`thinking` budget/disabled/adaptive). Historical rows without this metadata
+return `null` and render as `—`.
 
 Formulas:
 
@@ -343,7 +348,7 @@ Client ─▶ app.py:proxy_request ─▶ ModelRouter.route() ─▶ header pipe
 |---|---|
 | `config.py` | `load_config` / `validate_config` → `GatewayConfig` / `EndpointConfig` (flattened, one per model); `config_to_dict` groups back by `base_url`. `ModelRouter` (exact match), `detect_format`, `PROTOCOL_VALUES`. |
 | `store.py` | `ConfigStore` — immutable `_Snapshot(config, router, raw)` + `threading.Lock`. Every mutation: validate → atomic write → swap. Seeds `raw` from the file so empty-model endpoints survive a write-back. |
-| `app.py` | `build_app(...)`. `GET /v1/models` before the catch-all `/{full_path:path}`. `proxy_request` reads `store.router` / `store.config` per request. Helpers: `_build_upstream_headers`, `_rewrite_body`, `_sse_response`, `_buffered_response`, `_decompressor`, `_UsageCapture`. httpx timeout: connect 60 s / read 300 s / write 60 s / pool 60 s. |
+| `app.py` | `build_app(...)`. `GET /v1/models` before the catch-all `/{full_path:path}`. `proxy_request` reads `store.router` / `store.config` per request. Helpers: `_build_upstream_headers`, `_rewrite_body`, `_reasoning_effort`, `_sse_response`, `_buffered_response`, `_decompressor`, `_UsageCapture`. httpx timeout: connect 60 s / read 300 s / write 60 s / pool 60 s. |
 | `convert.py` | Decides *when* to convert: `get_convert_stats`, `convert_request_body`, `convert_response_body`, `convert_sse_chunks` (delegates to `apicompat.astream`). |
 | `admin.py` | Admin page + CRUD API, fetch-models, model-news, scan, extra-body. |
 | `watcher.py` | `ModelWatcher` asyncio task started in the app lifespan. |

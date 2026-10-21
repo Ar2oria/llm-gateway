@@ -37,10 +37,13 @@ def _today_range() -> tuple[str, int]:
 
 
 def _seed(db, start, i=10, cr=2, cw=1, o=5, status=200, base_url="https://upstream.example",
-          model="gpt-4o", ts_offset=10, duration_ms=None, ttft_ms=None):
+          model="gpt-4o", ts_offset=10, duration_ms=None, ttft_ms=None,
+          client_protocol=None, upstream_protocol=None, reasoning_effort=None):
     db.insert(ts=start + ts_offset, base_url=base_url, model=model, input_tokens=i,
               cache_read_tokens=cr, cache_write_tokens=cw, output_tokens=o, status=status,
-              duration_ms=duration_ms, ttft_ms=ttft_ms)
+              duration_ms=duration_ms, ttft_ms=ttft_ms,
+              client_protocol=client_protocol, upstream_protocol=upstream_protocol,
+              reasoning_effort=reasoning_effort)
 
 
 def test_stats_disabled_without_path():
@@ -115,7 +118,10 @@ def test_requests_list(tmp_path):
     day, start = _today_range()
     for i in range(3):
         _seed(db, start, model="gpt-4o" if i % 2 == 0 else "claude-sonnet",
-              ts_offset=10 + i, i=10 + i, cr=0, cw=0, o=1)
+              ts_offset=10 + i, i=10 + i, cr=0, cw=0, o=1,
+              client_protocol="anthropic_messages" if i == 2 else "openai_chat",
+              upstream_protocol="openai_chat",
+              reasoning_effort="high" if i == 2 else None)
     worker.process_pending()
     resp = client.get(f"/admin/api/requests?from={day}&to={day}")
     assert resp.status_code == 200
@@ -125,8 +131,12 @@ def test_requests_list(tmp_path):
     assert data["items"][0]["ts"] >= data["items"][1]["ts"]  # desc
     item = data["items"][0]
     for key in ("ts", "base_url", "model", "input_tokens", "cache_read_tokens",
-                "cache_write_tokens", "output_tokens", "status", "cost_usd"):
+                "cache_write_tokens", "output_tokens", "status", "cost_usd",
+                "client_protocol", "upstream_protocol", "reasoning_effort"):
         assert key in item
+    assert item["client_protocol"] == "anthropic_messages"
+    assert item["upstream_protocol"] == "openai_chat"
+    assert item["reasoning_effort"] == "high"
     # model filter
     resp = client.get(f"/admin/api/requests?from={day}&to={day}&model=gpt-4o")
     assert resp.json()["total"] == 2

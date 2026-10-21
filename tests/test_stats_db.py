@@ -1,9 +1,12 @@
 from gateway.stats.db import StatsDb
 
 
-def _seed(db, ts, base_url="https://a", model="m1", i=10, cr=2, cw=1, o=5, status=200):
+def _seed(db, ts, base_url="https://a", model="m1", i=10, cr=2, cw=1, o=5, status=200,
+          client_protocol=None, upstream_protocol=None, reasoning_effort=None):
     db.insert(ts=ts, base_url=base_url, model=model, input_tokens=i,
-              cache_read_tokens=cr, cache_write_tokens=cw, output_tokens=o, status=status)
+              cache_read_tokens=cr, cache_write_tokens=cw, output_tokens=o, status=status,
+              client_protocol=client_protocol, upstream_protocol=upstream_protocol,
+              reasoning_effort=reasoning_effort)
 
 
 def test_insert_and_pending(tmp_path):
@@ -86,6 +89,16 @@ def test_list_requests_pagination_and_filters(tmp_path):
     assert total == 2                      # [1002, 1004)
 
 
+def test_list_requests_includes_protocol_and_effort(tmp_path):
+    db = StatsDb(tmp_path / "usage.db")
+    _seed(db, 1000, client_protocol="anthropic_messages",
+          upstream_protocol="openai_chat", reasoning_effort="high")
+    items, _ = db.list_requests(0, 2000, None, None, 10, 0)
+    assert items[0]["client_protocol"] == "anthropic_messages"
+    assert items[0]["upstream_protocol"] == "openai_chat"
+    assert items[0]["reasoning_effort"] == "high"
+
+
 def test_timeseries_minute_granularity(tmp_path):
     db = StatsDb(tmp_path / "usage.db")
     _seed(db, 1000, base_url="https://a", model="m1", i=10, cr=2, cw=1, o=5)
@@ -135,8 +148,8 @@ def test_timeseries_model_filter(tmp_path):
     assert series[0]["model"] == "m1"
 
 
-def test_duration_migration_on_existing_db(tmp_path):
-    # Old DB without duration_ms/ttft_ms columns gets migrated on open.
+def test_metadata_migration_on_existing_db(tmp_path):
+    # Old DB without timing/protocol metadata columns gets migrated on open.
     import sqlite3
     p = tmp_path / "old.db"
     conn = sqlite3.connect(p)
@@ -151,9 +164,18 @@ def test_duration_migration_on_existing_db(tmp_path):
     conn.commit()
     conn.close()
     db = StatsDb(p)          # opens + migrates
+    cols = {r[1] for r in db._conn.execute("PRAGMA table_info(requests)")}
+    assert {"duration_ms", "ttft_ms", "client_protocol",
+            "upstream_protocol", "reasoning_effort"} <= cols
     db.insert(ts=1000, base_url="https://a", model="m1", input_tokens=1,
               cache_read_tokens=0, cache_write_tokens=0, output_tokens=10,
-              status=200, duration_ms=500, ttft_ms=200)
+              status=200, duration_ms=500, ttft_ms=200,
+              client_protocol="openai_responses",
+              upstream_protocol="openai_chat", reasoning_effort="xhigh")
+    items, _ = db.list_requests(0, 2000, None, None, 10, 0)
+    assert items[0]["client_protocol"] == "openai_responses"
+    assert items[0]["upstream_protocol"] == "openai_chat"
+    assert items[0]["reasoning_effort"] == "xhigh"
     rows = db.model_tps(0, 2000)
     assert rows == []        # only 1 sample -> omitted
     db.close()

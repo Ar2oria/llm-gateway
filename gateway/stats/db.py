@@ -19,7 +19,10 @@ CREATE TABLE IF NOT EXISTS requests (
     cache_write_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     status INTEGER NOT NULL,
-    cost_usd REAL
+    cost_usd REAL,
+    client_protocol TEXT,
+    upstream_protocol TEXT,
+    reasoning_effort TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_requests_ts ON requests(ts);
 CREATE INDEX IF NOT EXISTS idx_requests_base_model ON requests(base_url, model);
@@ -54,6 +57,15 @@ class StatsDb:
             if "ttft_ms" not in cols:
                 self._conn.execute(
                     "ALTER TABLE requests ADD COLUMN ttft_ms INTEGER")
+            if "client_protocol" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE requests ADD COLUMN client_protocol TEXT")
+            if "upstream_protocol" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE requests ADD COLUMN upstream_protocol TEXT")
+            if "reasoning_effort" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE requests ADD COLUMN reasoning_effort TEXT")
 
     def close(self) -> None:
         with self._lock:
@@ -63,14 +75,19 @@ class StatsDb:
                cache_read_tokens: int, cache_write_tokens: int,
                output_tokens: int, status: int,
                duration_ms: int | None = None,
-               ttft_ms: int | None = None) -> None:
+               ttft_ms: int | None = None,
+               client_protocol: str | None = None,
+               upstream_protocol: str | None = None,
+               reasoning_effort: str | None = None) -> None:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO requests (ts, base_url, model, input_tokens, cache_read_tokens,"
-                " cache_write_tokens, output_tokens, status, cost_usd, duration_ms, ttft_ms)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)",
+                " cache_write_tokens, output_tokens, status, cost_usd, duration_ms, ttft_ms,"
+                " client_protocol, upstream_protocol, reasoning_effort)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)",
                 (ts, base_url, model, input_tokens, cache_read_tokens,
-                 cache_write_tokens, output_tokens, status, duration_ms, ttft_ms),
+                 cache_write_tokens, output_tokens, status, duration_ms, ttft_ms,
+                 client_protocol, upstream_protocol, reasoning_effort),
             )
             self._conn.commit()
 
@@ -234,14 +251,17 @@ class StatsDb:
             ).fetchone()[0]
             rows = self._conn.execute(
                 f"SELECT ts, base_url, model, input_tokens, cache_read_tokens,"
-                f" cache_write_tokens, output_tokens, status, cost_usd"
+                f" cache_write_tokens, output_tokens, status, cost_usd,"
+                f" client_protocol, upstream_protocol, reasoning_effort"
                 f" FROM requests WHERE {where} ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?",
                 args + [limit, offset],
             ).fetchall()
         return [
             {"ts": r[0], "base_url": r[1], "model": r[2], "input_tokens": r[3],
              "cache_read_tokens": r[4], "cache_write_tokens": r[5],
-             "output_tokens": r[6], "status": r[7], "cost_usd": r[8]}
+             "output_tokens": r[6], "status": r[7], "cost_usd": r[8],
+             "client_protocol": r[9], "upstream_protocol": r[10],
+             "reasoning_effort": r[11]}
             for r in rows
         ], total
 

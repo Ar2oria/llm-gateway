@@ -40,6 +40,15 @@ from apicompat.openai_responses import (
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
 
+# Intentionally no longer maintaining Anthropic thinking.budget_tokens when
+# converting Responses reasoning effort back to Anthropic.
+_SKIPPED_CASES = {
+    "responses_to_anthropic_request__r2ar_reasoning_high":
+        "thinking.budget_tokens is intentionally no longer maintained",
+    "responses_to_anthropic_request__r2ar_reasoning_xhigh":
+        "thinking.budget_tokens is intentionally no longer maintained",
+}
+
 # Randomly generated ids (Go: 12 random bytes hex) and wall-clock stamps —
 # identical in shape, never identical in value.
 _ITEM_ID_RE = re.compile(r"^item_[0-9a-f]{24}$")
@@ -188,7 +197,9 @@ def _load_cases():
     for path in sorted(GOLDEN_DIR.glob("*.json")):
         if path.name == "fixtures.json":
             continue
-        cases.append(pytest.param(path, id=path.stem))
+        reason = _SKIPPED_CASES.get(path.stem)
+        marks = [pytest.mark.skip(reason=reason)] if reason else []
+        cases.append(pytest.param(path, id=path.stem, marks=marks))
     return cases
 
 

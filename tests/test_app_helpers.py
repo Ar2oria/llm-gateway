@@ -4,7 +4,9 @@ These pin the helper contracts at the unit level; the HTTP-level behavior
 tests (full proxy round-trips) live in test_app.py.
 """
 
-from gateway.app import _build_upstream_headers, _rewrite_body
+import pytest
+
+from gateway.app import _build_upstream_headers, _reasoning_effort, _rewrite_body
 from gateway.config import EndpointConfig
 from gateway.convert import get_convert_stats
 
@@ -136,6 +138,21 @@ def test_accept_encoding_from_custom_headers_sanitized():
         "apikey",
     )
     assert h["accept-encoding"] == "gzip"
+
+
+# --- _rewrite_body ---
+
+
+@pytest.mark.parametrize("body, expected", [
+    ({"reasoning": {"effort": "xhigh"}}, "xhigh"),
+    ({"output_config": {"effort": "medium"}}, "medium"),
+    ({"thinking": {"type": "enabled", "budget_tokens": 4096}}, "budget:4096"),
+    ({"thinking": {"type": "disabled"}}, "none"),
+    ({"thinking": {"type": "adaptive"}}, "adaptive"),
+    ({"messages": []}, None),
+])
+def test_reasoning_effort_extracts_final_upstream_shape(body, expected):
+    assert _reasoning_effort(body) == expected
 
 
 # --- _rewrite_body ---

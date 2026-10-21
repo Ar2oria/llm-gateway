@@ -54,17 +54,6 @@ _CLAMPED_EFFORT = {
 #: satisfies the same strict clients (``signature: z.string()``) without a
 #: magic value. Kept for backwards compatibility with existing tests.
 
-#: Default thinking budget per effort level when converting a Responses
-#: ``reasoning.effort`` back into Anthropic ``thinking.budget_tokens``
-#: (sub2api's defaultThinkingBudget).
-_DEFAULT_THINKING_BUDGET = {
-    "low": 1024,
-    "medium": 4096,
-    "high": 10240,
-    "max": 32768,
-}
-
-
 def _strip_top_level_combinators(schema: Any) -> Any:
     """Collapse top-level anyOf/oneOf/allOf in a tool input schema.
 
@@ -718,9 +707,9 @@ class AnthropicMessagesEncoder:
         if ir.tool_choice:
             payload["tool_choice"] = self._encode_tool_choice(ir.tool_choice)
 
-        # Thinking config: effort → output_config.effort (+ thinking enabled
-        # with a default budget for non-low efforts), mirroring sub2api's
-        # Responses→Anthropic bridge. xhigh maps back to Claude's "max".
+        # Thinking config: effort → output_config.effort. Non-low efforts
+        # enable thinking without deriving budget_tokens; Claude 5-5 uses
+        # adaptive thinking instead. xhigh maps back to Claude's "max".
         if ir.thinking and ir.thinking.effort:
             effort = ir.thinking.effort
             effort = _CLAMPED_EFFORT.get(effort, effort)
