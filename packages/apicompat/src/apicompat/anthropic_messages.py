@@ -43,7 +43,6 @@ _TOP_LEVEL_COMBINATORS = ("anyOf", "oneOf", "allOf")
 #: none/minimal/low/medium/high/xhigh and reject `max` with a 400. Clamp the
 #: wide end to the largest value the upstream domain knows.
 _CLAMPED_EFFORT = {
-    "max": "xhigh",
     "adaptive": "xhigh",
 }
 
@@ -713,8 +712,6 @@ class AnthropicMessagesEncoder:
         if ir.thinking and ir.thinking.effort:
             effort = ir.thinking.effort
             effort = _CLAMPED_EFFORT.get(effort, effort)
-            if effort == "xhigh":
-                effort = "max"
             payload["output_config"] = {"effort": effort}
             if effort not in ( "low", "none" ):
                 payload["thinking"] = {
