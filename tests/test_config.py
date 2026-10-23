@@ -32,6 +32,47 @@ def test_load_config_valid(tmp_path):
     assert cfg.endpoints[1].custom_headers == {}
 
 
+def test_endpoint_socks5_proxy_roundtrips(tmp_path):
+    proxy = "socks5://user:pass@127.0.0.1:1080"
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({
+        "server": {"api_key": "k"},
+        "endpoints": [{
+            "base_url": "https://a.com",
+            "socks5_proxy": proxy,
+            "models": [{"name": "m1"}, {"name": "m2"}],
+        }],
+    }))
+
+    cfg = load_config(p)
+
+    assert [ep.socks5_proxy for ep in cfg.endpoints] == [proxy, proxy]
+    assert config_to_dict(cfg)["endpoints"][0]["socks5_proxy"] == proxy
+
+
+@pytest.mark.parametrize("proxy", [
+    123,
+    "http://127.0.0.1:1080",
+    "socks5://127.0.0.1",
+    "socks5://127.0.0.1:bad",
+    "socks5://:1080",
+    "socks5://127.0.0.1:0",
+    "socks5://127.0.0.1:1080/path",
+])
+def test_endpoint_socks5_proxy_rejects_invalid_values(proxy):
+    raw = {
+        "server": {"api_key": "k"},
+        "endpoints": [{
+            "base_url": "https://a.com",
+            "socks5_proxy": proxy,
+            "models": [{"name": "m1"}],
+        }],
+    }
+
+    with pytest.raises(ConfigError, match="socks5_proxy"):
+        validate_config(raw)
+
+
 def test_load_config_defaults(tmp_path):
     p = tmp_path / "config.json"
     p.write_text(json.dumps({"server": {"api_key": "k"}, "endpoints": []}))

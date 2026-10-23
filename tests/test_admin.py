@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from gateway.app import build_app
-from gateway.config import load_config
+from gateway.config import EndpointConfig, GatewayConfig, load_config
 
 
 def _enc(s: str) -> str:
@@ -84,6 +84,22 @@ def test_admin_page_wires_prompt_template_ui(tmp_path):
     # 两张表都要接上：模型页（model/baseUrl）与接入点展开表（m/ep.base_url）
     assert 'actionBtn(promptButtonLabel(model), () => togglePromptTemplate(baseUrl, model))' in html
     assert 'actionBtn(promptButtonLabel(m), () => togglePromptTemplate(ep.base_url, m))' in html
+
+
+def test_admin_page_wires_socks5_proxy_fields(tmp_path):
+    client, _ = make_app(tmp_path)
+    html = client.get("/admin").text
+
+    assert 'id="ep-proxy-host"' in html
+    assert 'id="ep-proxy-port"' in html
+    assert 'id="ep-proxy-user"' in html
+    assert 'type="password" id="ep-proxy-pass"' in html
+    assert 'id="ep-proxy-toggle" aria-expanded="false"' in html
+    assert 'class="proxy-panel" id="ep-proxy-panel" hidden' in html
+    assert 'id="ep-proxy-summary"' in html
+    assert "buildSocks5Proxy" in html
+    assert "socks5ProxySummary" in html
+    assert "socks5_proxy: socks5Proxy" in html
 
 
 def test_model_modal_wires_prompt_field_and_toggle(tmp_path):
@@ -205,6 +221,55 @@ def test_update_endpoint_headers_200(tmp_path):
     assert resp.json()["custom_headers"] == {"User-Agent": "my-agent/1.0"}
 
 
+def test_update_endpoint_socks5_proxy_200(tmp_path):
+    client, p = make_app(tmp_path)
+    proxy = "socks5://user:pass@127.0.0.1:1080"
+
+    resp = client.put(
+        "/admin/api/endpoints?base_url=" + _enc("https://upstream.example"),
+        json={"custom_headers": {}, "socks5_proxy": proxy},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["socks5_proxy"] == proxy
+    data = json.loads(p.read_text())
+    entry = next(e for e in data["endpoints"] if e["base_url"] == "https://upstream.example")
+    assert entry["socks5_proxy"] == proxy
+
+
+def test_update_endpoint_clears_socks5_proxy_with_null(tmp_path):
+    client, p = make_app(tmp_path)
+    proxy = "socks5://127.0.0.1:1080"
+    client.put(
+        "/admin/api/endpoints?base_url=" + _enc("https://upstream.example"),
+        json={"custom_headers": {}, "socks5_proxy": proxy},
+    )
+
+    resp = client.put(
+        "/admin/api/endpoints?base_url=" + _enc("https://upstream.example"),
+        json={"custom_headers": {}, "socks5_proxy": None},
+    )
+
+    assert resp.status_code == 200
+    assert "socks5_proxy" not in resp.json()
+    data = json.loads(p.read_text())
+    entry = next(e for e in data["endpoints"] if e["base_url"] == "https://upstream.example")
+    assert "socks5_proxy" not in entry
+
+
+def test_add_endpoint_rejects_invalid_socks5_proxy(tmp_path):
+    client, p = make_app(tmp_path)
+    before = p.read_text()
+
+    resp = client.post(
+        "/admin/api/endpoints",
+        json={"base_url": "https://new.example", "socks5_proxy": "socks5://127.0.0.1"},
+    )
+
+    assert resp.status_code == 400
+    assert p.read_text() == before
+
+
 def test_update_endpoint_not_found_404(tmp_path):
     client, _ = make_app(tmp_path)
     resp = client.put(
@@ -301,6 +366,22 @@ def test_write_back_persists_to_config_file(tmp_path):
     data = json.loads(p.read_text())
     entry = next(e for e in data["endpoints"] if e["base_url"] == "https://new.example")
     assert entry["custom_headers"] == {"User-Agent": "ua/1.0"}
+
+
+def test_add_endpoint_persists_socks5_proxy(tmp_path):
+    client, p = make_app(tmp_path)
+    proxy = "socks5://user:pass@127.0.0.1:1080"
+
+    resp = client.post(
+        "/admin/api/endpoints",
+        json={"base_url": "https://new.example", "socks5_proxy": proxy},
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["socks5_proxy"] == proxy
+    data = json.loads(p.read_text())
+    entry = next(e for e in data["endpoints"] if e["base_url"] == "https://new.example")
+    assert entry["socks5_proxy"] == proxy
 
 
 def test_write_api_without_config_path_503_reads_ok(tmp_path):
@@ -419,6 +500,48 @@ def test_fetch_upstream_models_returns_deduped_ids(tmp_path):
     # GET against base_url + /v1/models, carrying the endpoint's configured UA
     assert captured["url"] == "https://upstream.example/v1/models"
     assert captured["headers"]["user-agent"] == "llm-gateway/1.0"
+
+
+def test_fetch_upstream_models_uses_endpoint_socks5_client(monkeypatch):
+    proxy = "socks5://user:pass@127.0.0.1:1080"
+    default_calls = []
+    proxy_calls = []
+
+    def default_handler(request: httpx.Request) -> httpx.Response:
+        default_calls.append(request)
+        return httpx.Response(200, json={"data": [{"id": "wrong"}]})
+
+    def proxy_handler(request: httpx.Request) -> httpx.Response:
+        proxy_calls.append(request)
+        return httpx.Response(200, json={"data": [{"id": "proxied"}]})
+
+    default_client = httpx.AsyncClient(transport=httpx.MockTransport(default_handler))
+    proxy_client = httpx.AsyncClient(transport=httpx.MockTransport(proxy_handler))
+    config = GatewayConfig(
+        host="127.0.0.1",
+        port=8080,
+        api_key="k",
+        endpoints=[EndpointConfig(
+            model="m1",
+            base_url="https://upstream.example",
+            socks5_proxy=proxy,
+        )],
+    )
+    app = build_app(config, client=default_client)
+
+    def proxy_client_factory(*args, **kwargs):
+        assert kwargs["proxy"] == proxy
+        return proxy_client
+
+    monkeypatch.setattr(httpx, "AsyncClient", proxy_client_factory)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/admin/api/upstream-models?base_url=" + _enc("https://upstream.example")
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["models"] == ["proxied"]
+    assert proxy_calls and not default_calls
 
 
 def test_fetch_upstream_models_bare_list_and_empty(tmp_path):
@@ -737,6 +860,50 @@ def test_scan_models_triggers_one_scan(tmp_path):
     assert resp.json()["results"][0]["added"] == ["m3"]
     assert resp.json()["results"][0]["models_news"] == ["m3"]
     assert client.get("/admin/api/endpoints").json()[0]["models_news"] == ["m3"]
+
+
+def test_scan_models_uses_endpoint_socks5_client(tmp_path, monkeypatch):
+    proxy = "socks5://user:pass@127.0.0.1:1080"
+    default_calls = []
+    proxy_calls = []
+
+    def default_handler(request: httpx.Request) -> httpx.Response:
+        default_calls.append(request)
+        return httpx.Response(200, json={"data": [{"id": "wrong"}]})
+
+    def proxy_handler(request: httpx.Request) -> httpx.Response:
+        proxy_calls.append(request)
+        return httpx.Response(200, json={"data": [{"id": "proxied"}]})
+
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({
+        "server": {"api_key": "k"},
+        "endpoints": [{
+            "base_url": "https://upstream.example",
+            "socks5_proxy": proxy,
+            "models": [{"name": "m1"}],
+        }],
+    }))
+    default_client = httpx.AsyncClient(transport=httpx.MockTransport(default_handler))
+    proxy_client = httpx.AsyncClient(transport=httpx.MockTransport(proxy_handler))
+    app = build_app(
+        load_config(p),
+        client=default_client,
+        config_path=str(p),
+        watcher_cache_path=tmp_path / "cache.json",
+    )
+
+    def proxy_client_factory(*args, **kwargs):
+        assert kwargs["proxy"] == proxy
+        return proxy_client
+
+    monkeypatch.setattr(httpx, "AsyncClient", proxy_client_factory)
+    client = TestClient(app)
+    resp = client.get("/admin/api/scan-models")
+
+    assert resp.status_code == 200
+    assert resp.json()["results"][0]["models"] == ["proxied"]
+    assert proxy_calls and not default_calls
 
 
 def test_scan_models_readonly_503(tmp_path):

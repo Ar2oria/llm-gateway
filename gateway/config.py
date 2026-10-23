@@ -4,6 +4,7 @@ import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 from apicompat import Protocol
 
 
@@ -62,6 +63,7 @@ class EndpointConfig:
     model: str
     base_url: str
     custom_headers: dict[str, str] = field(default_factory=dict)
+    socks5_proxy: str | None = None
     upstream_model: str | None = None
     system_prompt: str | None = None
     prompt_template: str | None = None  # template NAME (not body); resolved per request by gateway.prompt_templates
@@ -82,6 +84,30 @@ class GatewayConfig:
 
 def normalize_base_url(url: str) -> str:
     return url.rstrip("/")
+
+
+def _validate_socks5_proxy(raw: object) -> str | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ConfigError("endpoint 'socks5_proxy' must be a string")
+    proxy = raw.strip()
+    if not proxy:
+        return None
+    try:
+        parsed = urlsplit(proxy)
+        port = parsed.port
+    except ValueError as exc:
+        raise ConfigError(f"invalid endpoint 'socks5_proxy': {exc}") from exc
+    if parsed.scheme != "socks5":
+        raise ConfigError("endpoint 'socks5_proxy' must use the socks5:// scheme")
+    if not parsed.hostname:
+        raise ConfigError("endpoint 'socks5_proxy' must include a host")
+    if port is None or not 1 <= port <= 65535:
+        raise ConfigError("endpoint 'socks5_proxy' must include a valid port")
+    if parsed.path or parsed.query or parsed.fragment:
+        raise ConfigError("endpoint 'socks5_proxy' must not include a path, query, or fragment")
+    return proxy
 
 
 def _validate_pricing(raw: object) -> dict[str, float] | None:
@@ -148,6 +174,7 @@ def validate_config(raw: dict) -> GatewayConfig:
         if custom_headers is not None and not isinstance(custom_headers, dict):
             raise ConfigError("custom_headers must be an object")
         headers = {str(k): str(v) for k, v in (custom_headers or {}).items()}
+        socks5_proxy = _validate_socks5_proxy(item.get("socks5_proxy"))
         models_news_raw = item.get("models_news")
         if models_news_raw is None:
             models_news: list[str] = []
@@ -184,6 +211,7 @@ def validate_config(raw: dict) -> GatewayConfig:
                 model=str(name),
                 base_url=base_url,
                 custom_headers=dict(headers),
+                socks5_proxy=socks5_proxy,
                 upstream_model=str(model_entry["upstream_model"]) if model_entry.get("upstream_model") else None,
                 system_prompt=str(model_entry["system_prompt"]) if model_entry.get("system_prompt") else None,
                 prompt_template=prompt_template,
@@ -210,7 +238,12 @@ def config_to_dict(config: GatewayConfig) -> dict:
     for ep in config.endpoints:
         entry = by_base.setdefault(
             ep.base_url,
-            {"base_url": ep.base_url, "custom_headers": dict(ep.custom_headers), "models": []},
+            {
+                "base_url": ep.base_url,
+                "custom_headers": dict(ep.custom_headers),
+                **({"socks5_proxy": ep.socks5_proxy} if ep.socks5_proxy else {}),
+                "models": [],
+            },
         )
         # validate_config copies the endpoint-level models_news onto every
         # model under the base_url, so the first non-empty list is the

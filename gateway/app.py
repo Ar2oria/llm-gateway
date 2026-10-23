@@ -53,6 +53,7 @@ HOP_BY_HOP_HEADERS = {
 }
 
 WITH_BODY_METHODS = {"POST", "PUT"}
+UPSTREAM_TIMEOUT = httpx.Timeout(connect=60, read=300, write=60, pool=60)
 
 logger = logging.getLogger("llm-gateway")
 
@@ -483,8 +484,22 @@ def build_app(
     http_client = (
         client
         if client is not None
-        else httpx.AsyncClient(timeout=httpx.Timeout(connect=60, read=300, write=60, pool=60))
+        else httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT)
     )
+    proxied_clients: dict[str, httpx.AsyncClient] = {}
+
+    def upstream_client_for(socks5_proxy: str | None) -> httpx.AsyncClient:
+        if not socks5_proxy:
+            return http_client
+        proxied = proxied_clients.get(socks5_proxy)
+        if proxied is None:
+            proxied = httpx.AsyncClient(
+                proxy=socks5_proxy,
+                timeout=UPSTREAM_TIMEOUT,
+            )
+            proxied_clients[socks5_proxy] = proxied
+        return proxied
+
     # Read-only mode (no config_path) never starts the watcher: it could not
     # persist models_news anyway. The baseline cache path is resolved here —
     # once — so the watcher and the admin fetch-models route always share the
@@ -496,8 +511,13 @@ def build_app(
     else:
         watcher_cache = None
     model_watcher = (
-        ModelWatcher(store, http_client, interval=watcher_interval,
-                     cache_path=watcher_cache)
+        ModelWatcher(
+            store,
+            http_client,
+            interval=watcher_interval,
+            cache_path=watcher_cache,
+            http_client_for=upstream_client_for,
+        )
         if config_path is not None else None
     )
 
@@ -514,6 +534,8 @@ def build_app(
             cost_worker.stop(timeout=2.0)
         if stats_db is not None:
             stats_db.close()
+        for proxied in proxied_clients.values():
+            await proxied.aclose()
         if own_client:
             await http_client.aclose()
 
@@ -547,6 +569,7 @@ def build_app(
         )
 
     register_admin_routes(app, store, http_client=http_client,
+                          http_client_for=upstream_client_for,
                           watcher_cache_path=watcher_cache,
                           model_watcher=model_watcher,
                           prompt_store=prompt_store)
@@ -633,8 +656,9 @@ def build_app(
 
         start_time = time.monotonic()
         try:
-            upstream_resp = await http_client.send(
-                http_client.build_request(
+            upstream_client = upstream_client_for(endpoint.socks5_proxy)
+            upstream_resp = await upstream_client.send(
+                upstream_client.build_request(
                     request.method, upstream_url, headers=headers, content=json.dumps(body).encode(),
                 ),
                 stream=True,

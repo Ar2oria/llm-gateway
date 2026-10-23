@@ -51,7 +51,15 @@
   .modal-close:hover { color: var(--text); background: var(--bg); }
   .modal p { margin: 0; }
   .modal label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
-  .modal input[type=text], .modal textarea, .modal select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--card); color: var(--text); }
+  .modal input[type=text], .modal input[type=password], .modal textarea, .modal select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--card); color: var(--text); }
+  .proxy-section { margin-top: 12px; }
+  .proxy-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; background: var(--bg); text-align: left; }
+  .proxy-toggle .proxy-title { color: var(--text); }
+  .proxy-toggle .proxy-summary { margin-left: auto; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; }
+  .proxy-toggle .proxy-chevron { flex: 0 0 12px; color: var(--muted); font-size: 11px; text-align: center; }
+  .proxy-panel { padding: 8px 2px 0; }
+  .proxy-grid { display: grid; grid-template-columns: 1fr 120px; gap: 8px; }
+  .modal .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
   .modal textarea { min-height: 72px; resize: vertical; }
   .modal input[disabled] { background: var(--bg); color: var(--muted); }
   /* 系统提示词：标签行 + 只读的模板标签 */
@@ -541,6 +549,58 @@ function kvRow(key, value) {
 // Authorization 专用输入框的 Bearer 前缀（大小写不敏感）
 const BEARER_PREFIX = /^bearer\s+/i;
 
+// PROXY-URL-START
+// SOCKS5 配置在 config.json 中保存为完整 URL；编辑弹窗拆分展示账号、密码和地址。
+// Tested by tests/proxy_url_test.mjs.
+function parseSocks5Proxy(value) {
+  const empty = { host: "", port: "", username: "", password: "" };
+  if (!value) return empty;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "socks5:" || !parsed.hostname || !parsed.port
+        || parsed.pathname || parsed.search || parsed.hash) return empty;
+    return {
+      host: parsed.hostname.replace(/^\[|\]$/g, ""),
+      port: parsed.port,
+      username: decodeURIComponent(parsed.username),
+      password: decodeURIComponent(parsed.password),
+    };
+  } catch (err) {
+    return empty;
+  }
+}
+
+function buildSocks5Proxy(host, port, username, password) {
+  host = String(host || "").trim();
+  port = String(port || "").trim();
+  username = String(username || "").trim();
+  password = String(password || "");
+  if (!host && !port && !username && !password) return null;
+  if (!host) throw new Error("SOCKS5 主机不能为空");
+  if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+    throw new Error("SOCKS5 端口必须是 1-65535 的整数");
+  }
+  if (password && !username) throw new Error("填写密码时必须填写账号");
+  if (/[\s/@?#]/.test(host)) throw new Error("SOCKS5 主机格式不正确");
+  const hostPart = host.includes(":") && !(host.startsWith("[") && host.endsWith("]"))
+    ? "[" + host + "]" : host;
+  try {
+    const parsed = new URL("socks5://" + hostPart + ":" + port);
+    if (username) parsed.username = username;
+    if (password) parsed.password = password;
+    return parsed.href;
+  } catch (err) {
+    throw new Error("SOCKS5 地址格式不正确");
+  }
+}
+
+function socks5ProxySummary(proxy) {
+  if (!proxy || !proxy.host || !proxy.port) return "未配置";
+  const auth = proxy.username ? "已认证" : "无认证";
+  return proxy.host + ":" + proxy.port + " · " + auth;
+}
+// PROXY-URL-END
+
 function headerValue(headers, name) {
   // 按头名取值（大小写不敏感——配置文件里的键可能是任意大小写）
   const found = Object.entries(headers || {}).find(
@@ -570,6 +630,7 @@ function collectHeaders(kvList, uaInput, authInput) {
 function openEndpointModal(ep) {
   const isEdit = !!ep;
   const headers = ep ? ep.custom_headers : {};
+  const proxy = parseSocks5Proxy(isEdit ? ep.socks5_proxy : null);
   const ua = headerValue(headers, "User-Agent");
   const authRaw = headerValue(headers, "Authorization");
   // 专用框只接管 Bearer 形式的 Authorization（展示时去掉前缀只显示 key）；
@@ -587,6 +648,22 @@ function openEndpointModal(ep) {
     '<h2>' + (isEdit ? "编辑接入点" : "添加接入点") + '</h2>' +
     '<label>Base URL</label>' +
     '<input type="text" id="ep-base-url" value="' + escapeAttr(isEdit ? ep.base_url : "") + '"' + (isEdit ? " disabled" : "") + '>' +
+    '<div class="proxy-section">' +
+    '  <button type="button" class="proxy-toggle" id="ep-proxy-toggle" aria-expanded="false" aria-controls="ep-proxy-panel">' +
+    '    <span class="proxy-title">SOCKS5 代理</span>' +
+    '    <span class="proxy-summary" id="ep-proxy-summary">' + escapeHtml(socks5ProxySummary(proxy)) + '</span>' +
+    '    <span class="proxy-chevron" id="ep-proxy-chevron">▸</span>' +
+    '  </button>' +
+    '  <div class="proxy-panel" id="ep-proxy-panel" hidden>' +
+    '    <div class="proxy-grid">' +
+    '      <input type="text" id="ep-proxy-host" value="' + escapeAttr(proxy.host) + '" placeholder="主机，如 127.0.0.1">' +
+    '      <input type="text" id="ep-proxy-port" value="' + escapeAttr(proxy.port) + '" placeholder="端口，如 1080">' +
+    '      <input type="text" id="ep-proxy-user" value="' + escapeAttr(proxy.username) + '" placeholder="账号（可选）" autocomplete="off">' +
+    '      <input type="password" id="ep-proxy-pass" value="' + escapeAttr(proxy.password) + '" placeholder="密码（可选）" autocomplete="new-password">' +
+    '    </div>' +
+    '    <div class="hint">四项全部留空表示不使用代理。账号密码为空时走无认证 SOCKS5。</div>' +
+    '  </div>' +
+    '</div>' +
     '<label>User-Agent</label>' +
     '<input type="text" id="ep-ua" value="' + escapeAttr(ua) + '" placeholder="可选">' +
     '<label>Authorization</label>' +
@@ -601,22 +678,62 @@ function openEndpointModal(ep) {
     '</div>'
   );
 
+  const proxyToggle = document.getElementById("ep-proxy-toggle");
+  const proxyPanel = document.getElementById("ep-proxy-panel");
+  const proxyChevron = document.getElementById("ep-proxy-chevron");
+  const proxySummary = document.getElementById("ep-proxy-summary");
+  const proxyInputs = [
+    document.getElementById("ep-proxy-host"),
+    document.getElementById("ep-proxy-port"),
+    document.getElementById("ep-proxy-user"),
+    document.getElementById("ep-proxy-pass"),
+  ];
+  const refreshProxySummary = () => {
+    proxySummary.textContent = socks5ProxySummary({
+      host: proxyInputs[0].value.trim(),
+      port: proxyInputs[1].value.trim(),
+      username: proxyInputs[2].value.trim(),
+    });
+  };
+  const setProxyExpanded = (expanded) => {
+    proxyPanel.hidden = !expanded;
+    proxyChevron.textContent = expanded ? "▾" : "▸";
+    proxyToggle.setAttribute("aria-expanded", String(expanded));
+    proxyToggle.setAttribute("aria-label", (expanded ? "收起" : "展开") + " SOCKS5 代理配置");
+  };
+  proxyToggle.addEventListener("click", () => setProxyExpanded(proxyPanel.hidden));
+  for (const input of proxyInputs) input.addEventListener("input", refreshProxySummary);
+  setProxyExpanded(false);
+
   const kvList = document.getElementById("kv-list");
   for (const [k, v] of others) kvList.appendChild(kvRow(k, v));
   document.getElementById("kv-add").addEventListener("click", () => kvList.appendChild(kvRow()));
   document.getElementById("modal-cancel").addEventListener("click", closeModal);
   document.getElementById("modal-save").addEventListener("click", async () => {
+    let socks5Proxy;
+    try {
+      socks5Proxy = buildSocks5Proxy(
+        document.getElementById("ep-proxy-host").value,
+        document.getElementById("ep-proxy-port").value,
+        document.getElementById("ep-proxy-user").value,
+        document.getElementById("ep-proxy-pass").value
+      );
+    } catch (err) {
+      toast(err.message, "error");
+      return;
+    }
     const headers = collectHeaders(kvList, document.getElementById("ep-ua"),
                                   document.getElementById("ep-auth"));
     try {
       if (isEdit) {
         await api("PUT", "/admin/api/endpoints?base_url=" + encodeURIComponent(ep.base_url),
-                  { custom_headers: headers });
+                  { custom_headers: headers, socks5_proxy: socks5Proxy });
         toast("已保存", "success");
       } else {
         const baseUrl = document.getElementById("ep-base-url").value.trim();
         if (!baseUrl) { toast("Base URL 不能为空", "error"); return; }
-        await api("POST", "/admin/api/endpoints", { base_url: baseUrl, custom_headers: headers });
+        await api("POST", "/admin/api/endpoints",
+                  { base_url: baseUrl, custom_headers: headers, socks5_proxy: socks5Proxy });
         toast("已添加接入点", "success");
       }
       closeModal();

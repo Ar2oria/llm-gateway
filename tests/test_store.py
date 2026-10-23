@@ -34,6 +34,18 @@ def test_add_endpoint_writes_file_and_routes(tmp_path):
     assert store.endpoint_dicts(base_url="https://c.com")[0]["custom_headers"] == {"User-Agent": "ua/1.0"}
 
 
+def test_add_endpoint_writes_socks5_proxy(tmp_path):
+    store, p = make_store(tmp_path)
+    proxy = "socks5://user:pass@127.0.0.1:1080"
+
+    store.add_endpoint("https://c.com", socks5_proxy=proxy)
+
+    data = json.loads(p.read_text())
+    entry = next(e for e in data["endpoints"] if e["base_url"] == "https://c.com")
+    assert entry["socks5_proxy"] == proxy
+    assert store.endpoint_dicts(base_url="https://c.com")[0]["socks5_proxy"] == proxy
+
+
 def test_add_endpoint_duplicate_base_url_raises_and_unchanged(tmp_path):
     store, p = make_store(tmp_path)
     before = p.read_text()
@@ -74,6 +86,31 @@ def test_update_endpoint_headers_replaces(tmp_path):
     entry = next(e for e in data["endpoints"] if e["base_url"] == "https://a.com")
     assert entry["custom_headers"] == {"User-Agent": "new/1.0"}
     assert store.endpoint_dicts(base_url="https://a.com")[0]["custom_headers"] == {"User-Agent": "new/1.0"}
+
+
+def test_update_endpoint_replaces_socks5_proxy(tmp_path):
+    store, p = make_store(tmp_path)
+    proxy = "socks5://user:pass@127.0.0.1:1080"
+
+    store.update_endpoint("https://a.com", {"User-Agent": "new/1.0"}, socks5_proxy=proxy)
+
+    data = json.loads(p.read_text())
+    entry = next(e for e in data["endpoints"] if e["base_url"] == "https://a.com")
+    assert entry["socks5_proxy"] == proxy
+    assert store.router.route("m1").socks5_proxy == proxy
+
+
+def test_update_endpoint_clears_socks5_proxy_with_none(tmp_path):
+    store, p = make_store(tmp_path)
+    proxy = "socks5://user:pass@127.0.0.1:1080"
+    store.update_endpoint("https://a.com", {}, socks5_proxy=proxy)
+
+    store.update_endpoint("https://a.com", {}, socks5_proxy=None)
+
+    data = json.loads(p.read_text())
+    entry = next(e for e in data["endpoints"] if e["base_url"] == "https://a.com")
+    assert "socks5_proxy" not in entry
+    assert store.router.route("m1").socks5_proxy is None
 
 
 def test_delete_endpoint_removes_models_from_router_and_file(tmp_path):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
@@ -68,6 +69,7 @@ def _parse_pricing(payload: dict) -> dict[str, float] | None:
 
 def register_admin_routes(app: FastAPI, store: ConfigStore,
                           http_client: httpx.AsyncClient | None = None,
+                          http_client_for: Callable[[str | None], httpx.AsyncClient] | None = None,
                           watcher_cache_path: str | Path | None = None,
                           model_watcher: ModelWatcher | None = None,
                           prompt_store: PromptTemplateStore | None = None) -> None:
@@ -105,8 +107,13 @@ def register_admin_routes(app: FastAPI, store: ConfigStore,
         headers = payload.get("custom_headers") or {}
         if not isinstance(headers, dict):
             return _error(400, "custom_headers must be an object")
+        socks5_proxy = payload.get("socks5_proxy") or None
         try:
-            store.add_endpoint(str(base_url), {str(k): str(v) for k, v in headers.items()})
+            store.add_endpoint(
+                str(base_url),
+                {str(k): str(v) for k, v in headers.items()},
+                socks5_proxy=socks5_proxy,
+            )
         except ConfigError as exc:
             return _error(400, str(exc))
         except StoreError as exc:
@@ -125,8 +132,13 @@ def register_admin_routes(app: FastAPI, store: ConfigStore,
         headers = payload["custom_headers"]
         if not isinstance(headers, dict):
             return _error(400, "custom_headers must be an object")
+        socks5_proxy = payload["socks5_proxy"] if "socks5_proxy" in payload else _UNSET
         try:
-            store.update_endpoint(base_url, {str(k): str(v) for k, v in headers.items()})
+            store.update_endpoint(
+                base_url,
+                {str(k): str(v) for k, v in headers.items()},
+                socks5_proxy=socks5_proxy,
+            )
         except NotFoundError as exc:
             return _error(404, str(exc))
         except ConfigError as exc:
@@ -335,9 +347,12 @@ def register_admin_routes(app: FastAPI, store: ConfigStore,
         if not entries:
             return _error(404, f"endpoint not found: {base_url}")
         custom = entries[0].get("custom_headers") or {}
+        socks5_proxy = entries[0].get("socks5_proxy")
         news = [str(i) for i in entries[0].get("models_news") or []]
         try:
-            if http_client is not None:
+            if http_client_for is not None:
+                ids = await fetch_models(base_url, custom, http_client_for(socks5_proxy))
+            elif http_client is not None:
                 ids = await fetch_models(base_url, custom, http_client)
             else:
                 async with httpx.AsyncClient(timeout=FETCH_MODELS_TIMEOUT) as client:

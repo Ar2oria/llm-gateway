@@ -110,6 +110,141 @@ def test_no_client_auth_sends_no_auth_upstream():
     assert captured["headers"].get("x-api-key", "") == ""
 
 
+def test_proxy_request_uses_endpoint_socks5_client(monkeypatch):
+    proxy = "socks5://user:pass@127.0.0.1:1080"
+    default_calls = []
+    proxy_calls = []
+
+    def default_handler(request: httpx.Request) -> httpx.Response:
+        default_calls.append(request)
+        return httpx.Response(200, json={})
+
+    def proxy_handler(request: httpx.Request) -> httpx.Response:
+        proxy_calls.append(request)
+        return httpx.Response(200, json={})
+
+    default_client = httpx.AsyncClient(transport=httpx.MockTransport(default_handler))
+    proxy_client = httpx.AsyncClient(transport=httpx.MockTransport(proxy_handler))
+    config = GatewayConfig(
+        host="127.0.0.1",
+        port=8080,
+        api_key="local-secret",
+        endpoints=[EndpointConfig(
+            model="proxied-model",
+            base_url="https://upstream.example",
+            socks5_proxy=proxy,
+        )],
+    )
+    app = build_app(config, client=default_client)
+
+    def proxy_client_factory(*args, **kwargs):
+        assert kwargs["proxy"] == proxy
+        return proxy_client
+
+    monkeypatch.setattr(gateway_app.httpx, "AsyncClient", proxy_client_factory)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/chat/completions",
+            json={"model": "proxied-model", "messages": []},
+        )
+
+    assert resp.status_code == 200
+    assert proxy_calls and not default_calls
+
+
+def test_socks5_client_is_reused_and_closed_with_app(monkeypatch):
+    proxy = "socks5://127.0.0.1:1080"
+    factory_calls = []
+    proxy_calls = []
+
+    def proxy_handler(request: httpx.Request) -> httpx.Response:
+        proxy_calls.append(request)
+        return httpx.Response(200, json={})
+
+    default_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(500))
+    )
+    proxy_client = httpx.AsyncClient(transport=httpx.MockTransport(proxy_handler))
+    config = GatewayConfig(
+        host="127.0.0.1",
+        port=8080,
+        api_key="k",
+        endpoints=[EndpointConfig(
+            model="m1",
+            base_url="https://upstream.example",
+            socks5_proxy=proxy,
+        )],
+    )
+    app = build_app(config, client=default_client)
+
+    def proxy_client_factory(*args, **kwargs):
+        factory_calls.append(kwargs["proxy"])
+        return proxy_client
+
+    monkeypatch.setattr(gateway_app.httpx, "AsyncClient", proxy_client_factory)
+    with TestClient(app) as client:
+        for _ in range(2):
+            resp = client.post("/v1/chat/completions", json={"model": "m1", "messages": []})
+            assert resp.status_code == 200
+
+    assert factory_calls == [proxy]
+    assert len(proxy_calls) == 2
+    assert proxy_client.is_closed
+    assert not default_client.is_closed
+    asyncio.run(default_client.aclose())
+
+
+def test_admin_socks5_proxy_update_takes_effect_next_request(tmp_path, monkeypatch):
+    proxy_a = "socks5://127.0.0.1:1080"
+    proxy_b = "socks5://127.0.0.1:1081"
+    proxy_b_calls = []
+
+    def default_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    def proxy_a_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    def proxy_b_handler(request: httpx.Request) -> httpx.Response:
+        proxy_b_calls.append(request)
+        return httpx.Response(200, json={})
+
+    default_client = httpx.AsyncClient(transport=httpx.MockTransport(default_handler))
+    proxy_a_client = httpx.AsyncClient(transport=httpx.MockTransport(proxy_a_handler))
+    proxy_b_client = httpx.AsyncClient(transport=httpx.MockTransport(proxy_b_handler))
+    config = GatewayConfig(
+        host="127.0.0.1",
+        port=8080,
+        api_key="k",
+        endpoints=[EndpointConfig(
+            model="m1",
+            base_url="https://upstream.example",
+            socks5_proxy=proxy_a,
+        )],
+    )
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps(config_to_dict(config)))
+    app = build_app(config, client=default_client, config_path=str(p),
+                    watcher_cache_path=tmp_path / "cache.json")
+
+    def proxy_client_factory(*args, **kwargs):
+        return {proxy_a: proxy_a_client, proxy_b: proxy_b_client}[kwargs["proxy"]]
+
+    monkeypatch.setattr(gateway_app.httpx, "AsyncClient", proxy_client_factory)
+    client = TestClient(app)
+    resp = client.put(
+        "/admin/api/endpoints?base_url=https%3A%2F%2Fupstream.example",
+        json={"custom_headers": {}, "socks5_proxy": proxy_b},
+    )
+    assert resp.status_code == 200
+    resp = client.post("/v1/chat/completions", json={"model": "m1", "messages": []})
+
+    assert resp.status_code == 200
+    assert proxy_b_calls
+    for c in (default_client, proxy_a_client, proxy_b_client):
+        asyncio.run(c.aclose())
+
+
 def test_client_auth_forwarded_as_is():
     captured = {}
 

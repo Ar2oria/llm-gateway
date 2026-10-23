@@ -76,6 +76,7 @@ One entry per upstream base URL; `base_url` must be unique.
 |---|---|
 | `base_url` | Upstream root. The client's path is appended verbatim (`POST /v1/messages` → `{base_url}/v1/messages`). |
 | `custom_headers` | Default headers for every model under this endpoint. Auth usually lives here. Non-auth defaults override same-named client headers; a real client auth key overrides the default. |
+| `socks5_proxy` | Optional `socks5://[user:pass@]host:port` URL (no path/query). Applied to proxied requests, fetch-models, and the model watcher. |
 | `models` | Models this endpoint serves. May be empty. |
 | `models_news` | Internal. Managed by the watcher; do not edit. |
 
@@ -348,7 +349,7 @@ Client ─▶ app.py:proxy_request ─▶ ModelRouter.route() ─▶ header pipe
 |---|---|
 | `config.py` | `load_config` / `validate_config` → `GatewayConfig` / `EndpointConfig` (flattened, one per model); `config_to_dict` groups back by `base_url`. `ModelRouter` (exact match), `detect_format`, `PROTOCOL_VALUES`. |
 | `store.py` | `ConfigStore` — immutable `_Snapshot(config, router, raw)` + `threading.Lock`. Every mutation: validate → atomic write → swap. Seeds `raw` from the file so empty-model endpoints survive a write-back. |
-| `app.py` | `build_app(...)`. `GET /v1/models` before the catch-all `/{full_path:path}`. `proxy_request` reads `store.router` / `store.config` per request. Helpers: `_build_upstream_headers`, `_rewrite_body`, `_reasoning_effort`, `_sse_response`, `_buffered_response`, `_decompressor`, `_UsageCapture`. httpx timeout: connect 60 s / read 300 s / write 60 s / pool 60 s. |
+| `app.py` | `build_app(...)`. `GET /v1/models` before the catch-all `/{full_path:path}`. `proxy_request` reads `store.router` / `store.config` per request. Lazily caches one httpx client per endpoint `socks5_proxy` and shares the selector with fetch-models/watcher. Helpers: `_build_upstream_headers`, `_rewrite_body`, `_reasoning_effort`, `_sse_response`, `_buffered_response`, `_decompressor`, `_UsageCapture`. httpx timeout: connect 60 s / read 300 s / write 60 s / pool 60 s. |
 | `convert.py` | Decides *when* to convert: `get_convert_stats`, `convert_request_body`, `convert_response_body`, `convert_sse_chunks` (delegates to `apicompat.astream`). |
 | `admin.py` | Admin page + CRUD API, fetch-models, model-news, scan, extra-body. |
 | `watcher.py` | `ModelWatcher` asyncio task started in the app lifespan. |
@@ -370,7 +371,8 @@ Client ─▶ app.py:proxy_request ─▶ ModelRouter.route() ─▶ header pipe
 5. **Body rewrite** — `convert_request_body` (if converting) then
    `_rewrite_body` (`upstream_model`, `system_prompt`, `extra_body` with
    null-delete).
-6. **Forward** via httpx (502 on `HTTPError`). SSE is streamed with
+6. **Forward** with the endpoint's direct or SOCKS5 httpx client (502 on
+   `HTTPError`). SSE is streamed with
    `aclose()` in `finally`; otherwise buffered. Converting transforms the
    response back.
 

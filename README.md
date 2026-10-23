@@ -64,6 +64,11 @@ uv sync --reinstall --all-extras --python=3.11
 ```
 其中 apikey 是请求本地网关时使用的密钥。
 
+如需让某个端点通过 SOCKS5 代理访问，可在该端点增加
+`"socks5_proxy": "socks5://user:password@127.0.0.1:1080"`（无认证时省略
+`user:password@`）。也可以在管理界面的接入点编辑弹窗中分别填写主机、端口、
+账号和密码。
+
 保存为 `config.local.json`，然后启动：
 
 ```bash

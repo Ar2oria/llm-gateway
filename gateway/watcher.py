@@ -12,6 +12,7 @@ import logging
 import os
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
@@ -71,9 +72,11 @@ class ModelWatcher:
     def __init__(self, store: ConfigStore, http_client: httpx.AsyncClient,
                  interval: float = DEFAULT_INTERVAL,
                  cache_path: str | Path | None = None,
-                 now_fn=time.time) -> None:
+                 now_fn=time.time,
+                 http_client_for: Callable[[str | None], httpx.AsyncClient] | None = None) -> None:
         self._store = store
         self._http = http_client
+        self._http_client_for = http_client_for
         self._interval = interval
         self._cache_path = Path(cache_path) if cache_path is not None \
             else default_cache_path()
@@ -108,7 +111,11 @@ class ModelWatcher:
             for entry in self._store.endpoint_dicts():
                 base_url = entry["base_url"]
                 try:
-                    ids = await fetch_models(base_url, entry["custom_headers"] or {}, self._http)
+                    client = (
+                        self._http_client_for(entry.get("socks5_proxy"))
+                        if self._http_client_for is not None else self._http
+                    )
+                    ids = await fetch_models(base_url, entry["custom_headers"] or {}, client)
                 except FetchError as exc:
                     logger.warning("model watcher: skipping %s (%s)", base_url, exc)
                     results.append({"base_url": base_url, "ok": False, "error": str(exc)})

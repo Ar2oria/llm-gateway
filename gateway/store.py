@@ -105,20 +105,25 @@ class ConfigStore:
                 entry.pop("models_news", None)
             self._commit(raw)
 
-    def add_endpoint(self, base_url: str, custom_headers: dict[str, str] | None = None) -> None:
+    def add_endpoint(self, base_url: str, custom_headers: dict[str, str] | None = None,
+                     socks5_proxy: str | None = None) -> None:
         with self._lock:
             raw = copy.deepcopy(self._snapshot.raw)
             base_url = normalize_base_url(str(base_url))
             if self._find_endpoint_raw(raw, base_url) is not None:
                 raise ConfigError("endpoint base_url values must be unique")
-            raw["endpoints"].append({
+            entry = {
                 "base_url": base_url,
                 "custom_headers": {str(k): str(v) for k, v in (custom_headers or {}).items()},
                 "models": [],
-            })
+            }
+            if socks5_proxy:
+                entry["socks5_proxy"] = str(socks5_proxy)
+            raw["endpoints"].append(entry)
             self._commit(raw)
 
-    def update_endpoint(self, base_url: str, custom_headers: dict[str, str]) -> None:
+    def update_endpoint(self, base_url: str, custom_headers: dict[str, str],
+                        socks5_proxy: str | None | object = _UNSET) -> None:
         with self._lock:
             raw = copy.deepcopy(self._snapshot.raw)
             base_url = normalize_base_url(str(base_url))
@@ -126,6 +131,11 @@ class ConfigStore:
             if entry is None:
                 raise NotFoundError(f"endpoint not found: {base_url}")
             entry["custom_headers"] = {str(k): str(v) for k, v in custom_headers.items()}
+            if socks5_proxy is not _UNSET:
+                if socks5_proxy:
+                    entry["socks5_proxy"] = str(socks5_proxy)
+                else:
+                    entry.pop("socks5_proxy", None)
             self._commit(raw)
 
     def delete_endpoint(self, base_url: str) -> None:
@@ -254,7 +264,7 @@ class ConfigStore:
         for entry in self._snapshot.raw["endpoints"]:
             if base_url is not None and entry.get("base_url") != base_url:
                 continue
-            result.append({
+            payload = {
                 "base_url": entry["base_url"],
                 "custom_headers": dict(entry.get("custom_headers") or {}),
                 "models_news": [str(i) for i in entry.get("models_news") or []],
@@ -269,7 +279,10 @@ class ConfigStore:
                     }
                     for m in entry.get("models", [])
                 ],
-            })
+            }
+            if entry.get("socks5_proxy"):
+                payload["socks5_proxy"] = entry["socks5_proxy"]
+            result.append(payload)
         return result
 
     def _find_endpoint_raw(self, raw: dict, base_url: str) -> dict | None:
