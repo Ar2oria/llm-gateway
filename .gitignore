@@ -17,3 +17,5 @@ docs/superpowers
 prompts/ds-purge/prompt.md
 prompts/cc-ds-purge/prompt.md
 prompts/codex-ds-purge/prompt.md
+/prompts/ds-purge-re/prompt.md
+/prompts/ds-purge-v1/prompt.md
