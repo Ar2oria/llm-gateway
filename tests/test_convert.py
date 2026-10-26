@@ -140,23 +140,45 @@ def test_anthropic_thinking_config_maps_to_reasoning_effort():
     assert out.get("reasoning_effort") == "xhigh"
 
 
-def test_anthropic_effort_max_clamped_to_xhigh_for_openai():
-    """Claude Code's output_config.effort accepts `max`, but some upstreams
-    (e.g. opencode Console Go) only accept none/minimal/low/medium/high/xhigh
-    and reject `max` with a 400. `max` must be clamped to `xhigh` so the
-    conversion is accepted."""
+def test_anthropic_effort_max_forwarded_unchanged():
+    """Claude Code's `output_config.effort: max` is forwarded as-is.
+
+    This intentionally diverges from sub2api, which clamps `max` down to
+    `xhigh` for upstreams whose effort domain stops there. The upstreams this
+    gateway talks to accept `max`, so passing it through preserves Claude
+    Code's selected thinking depth instead of silently weakening it.
+    """
     stats = get_convert_stats("/v1/messages", "openai_responses")
     out = convert_request_body(stats, {
         "model": "m", "max_tokens": 100,
         "output_config": {"effort": "max"},
         "messages": [{"role": "user", "content": "hi"}],
     })
-    assert out.get("reasoning") == {"effort": "xhigh", "summary": "auto"}
-    # Chat direction mirrors the same clamp.
+    assert out.get("reasoning") == {"effort": "max", "summary": "auto"}
+    # Chat direction forwards it unchanged too.
     stats = get_convert_stats("/v1/messages", "openai_chat")
     out = convert_request_body(stats, {
         "model": "m", "max_tokens": 100,
         "output_config": {"effort": "max"},
+        "messages": [{"role": "user", "content": "hi"}],
+    })
+    assert out.get("reasoning_effort") == "max"
+
+
+def test_anthropic_adaptive_effort_clamped_to_xhigh_for_openai():
+    """`adaptive` is Claude-only and has no upstream equivalent, so it still
+    clamps to the largest value the OpenAI effort domain knows."""
+    stats = get_convert_stats("/v1/messages", "openai_responses")
+    out = convert_request_body(stats, {
+        "model": "m", "max_tokens": 100,
+        "output_config": {"effort": "adaptive"},
+        "messages": [{"role": "user", "content": "hi"}],
+    })
+    assert out.get("reasoning") == {"effort": "xhigh", "summary": "auto"}
+    stats = get_convert_stats("/v1/messages", "openai_chat")
+    out = convert_request_body(stats, {
+        "model": "m", "max_tokens": 100,
+        "output_config": {"effort": "adaptive"},
         "messages": [{"role": "user", "content": "hi"}],
     })
     assert out.get("reasoning_effort") == "xhigh"

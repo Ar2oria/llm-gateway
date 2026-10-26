@@ -65,6 +65,12 @@ ANTHROPIC_THINKING_ENVELOPE_PREFIX = "anthropic-thinking-v1:"
 #: errors (sub2api's DefaultMinMaxOutputTokens).
 MIN_MAX_OUTPUT_TOKENS = 128
 
+#: Schema name emitted when the source protocol carried none. Responses
+#: requires the field on every ``json_schema`` format; Anthropic's
+#: ``output_format`` has no name slot, so a converted request always lands
+#: here.
+DEFAULT_SCHEMA_NAME = "structured_output"
+
 #: Default ``max_tokens`` when the source protocol does not carry one
 #: (Anthropic requires the field).
 
@@ -1422,13 +1428,18 @@ class OpenAIResponsesEncoder:
 
         # Text: the Anthropic bridge pins verbosity "medium"; the Chat
         # bridge maps response_format into text.format (and emits nothing
-        # otherwise).
+        # otherwise). Both live on the same ``text`` object, so they merge:
+        # assigning in exclusive branches dropped the structured-output
+        # constraint for every Anthropic source.
+        text_config: Dict[str, Any] = {}
         if options.get("source") == "anthropic_messages":
-            payload["text"] = {"verbosity": "medium"}
-        elif ir.response_format and ir.response_format.type != "text":
-            payload["text"] = {
-                "format": self._encode_response_format(ir.response_format)
-            }
+            text_config["verbosity"] = "medium"
+        if ir.response_format and ir.response_format.type != "text":
+            text_config["format"] = self._encode_response_format(
+                ir.response_format
+            )
+        if text_config:
+            payload["text"] = text_config
 
         if ir.tool_choice:
             payload["tool_choice"] = self._encode_tool_choice(ir.tool_choice)
@@ -1644,13 +1655,20 @@ class OpenAIResponsesEncoder:
         return "auto"
 
     def _encode_response_format(self, fmt: IRResponseFormat) -> Dict[str, Any]:
-        """Encode response format."""
+        """Encode response format.
+
+        Responses requires ``name`` on every ``json_schema`` format and
+        rejects the request with a bare 400 when it is missing. Anthropic's
+        ``output_format`` carries no name, so a converted request must supply
+        a stable fallback rather than emitting a nameless schema.
+        """
         if fmt.type == "json_schema":
-            result: Dict[str, Any] = {"type": "json_schema"}
+            result: Dict[str, Any] = {
+                "type": "json_schema",
+                "name": fmt.schema_name or DEFAULT_SCHEMA_NAME,
+            }
             if fmt.json_schema:
                 result["schema"] = fmt.json_schema
-            if fmt.schema_name:
-                result["name"] = fmt.schema_name
             if fmt.strict:
                 result["strict"] = True
             return result

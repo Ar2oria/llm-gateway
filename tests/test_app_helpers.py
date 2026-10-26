@@ -374,3 +374,88 @@ def test_rewrite_body_empty_override_keeps_no_prompt():
     out = rewrite({"model": "m", "messages": [{"role": "user", "content": "hi"}]},
                   make_endpoint(system_prompt="hand"), system_prompt="")
     assert out == {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
+
+
+# --- structured-output calls bypass the injected prompt -------------------
+
+SCHEMA = {"type": "object", "properties": {"ok": {"type": "boolean"}},
+          "required": ["ok"], "additionalProperties": False}
+
+
+def test_rewrite_body_skips_template_for_anthropic_structured_output():
+    # Claude Code's hook evaluator (`/goal`), memory recall, and the
+    # title/rename helpers all send an Anthropic ``output_format``; their
+    # system prompt is the machine-facing instruction that tells the model to
+    # answer in JSON. Replacing it with a persona template strips the only
+    # instruction the caller depends on.
+    out = rewrite(
+        {"model": "m", "max_tokens": 100,
+         "system": "judge the transcript",
+         "messages": [{"role": "user", "content": "hi"}],
+         "output_format": {"type": "json_schema", "schema": SCHEMA}},
+        make_endpoint(system_prompt="PERSONA"),
+        path="/v1/messages", system_prompt="PERSONA",
+    )
+    assert out["system"] == "judge the transcript"
+
+
+def test_rewrite_body_skips_template_for_anthropic_output_config_format():
+    # The newer spelling must be recognized too.
+    out = rewrite(
+        {"model": "m", "max_tokens": 100,
+         "system": "judge the transcript",
+         "messages": [{"role": "user", "content": "hi"}],
+         "output_config": {"format": {"type": "json_schema", "schema": SCHEMA}}},
+        make_endpoint(), path="/v1/messages", system_prompt="PERSONA",
+    )
+    assert out["system"] == "judge the transcript"
+
+
+def test_rewrite_body_skips_template_for_responses_text_format():
+    # Codex drives this shape: ``text: {format: {...}}`` over the Responses
+    # wire API, with the system prompt in ``instructions``.
+    out = rewrite(
+        {"model": "m", "instructions": "judge the transcript", "input": "hi",
+         "text": {"format": {"type": "json_schema", "name": "v", "schema": SCHEMA}}},
+        make_endpoint(), path="/v1/responses", system_prompt="PERSONA",
+    )
+    assert out["instructions"] == "judge the transcript"
+
+
+def test_rewrite_body_skips_template_for_chat_response_format():
+    out = rewrite(
+        {"model": "m",
+         "messages": [{"role": "system", "content": "judge the transcript"},
+                      {"role": "user", "content": "hi"}],
+         "response_format": {"type": "json_schema",
+                             "json_schema": {"name": "v", "schema": SCHEMA}}},
+        make_endpoint(), path="/v1/chat/completions", system_prompt="PERSONA",
+    )
+    roles = [m["role"] for m in out["messages"]]
+    assert roles == ["system", "user"]
+    assert out["messages"][0]["content"] == "judge the transcript"
+
+
+def test_rewrite_body_text_format_does_not_bypass():
+    # An explicit ``{"type": "text"}`` is the absence of a constraint; a
+    # normal conversation must still receive the template.
+    out = rewrite(
+        {"model": "m", "instructions": "old", "input": "hi",
+         "text": {"format": {"type": "text"}}},
+        make_endpoint(), path="/v1/responses", system_prompt="PERSONA",
+    )
+    assert out["instructions"] == "PERSONA"
+
+
+def test_rewrite_body_still_applies_upstream_model_when_bypassing():
+    # Only the prompt is skipped; model rewriting and extra_body still run.
+    out = rewrite(
+        {"model": "m", "max_tokens": 100, "system": "judge",
+         "messages": [{"role": "user", "content": "hi"}],
+         "output_format": {"type": "json_schema", "schema": SCHEMA}},
+        make_endpoint(upstream_model="real"),
+        path="/v1/messages", extra_body={"anthropic_messages": {"temperature": 0}},
+        system_prompt="PERSONA",
+    )
+    assert out["model"] == "real"
+    assert out["system"] == "judge"

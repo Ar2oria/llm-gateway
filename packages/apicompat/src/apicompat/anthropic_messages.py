@@ -18,6 +18,7 @@ from .ir import (
     IRMessage,
     IRRequest,
     IRResponse,
+    IRResponseFormat,
     IRServerToolUseBlock,
     IRStreamEvent,
     IRTextBlock,
@@ -157,6 +158,20 @@ class AnthropicMessagesDecoder:
         # Decode tool choice
         if "tool_choice" in payload:
             ir.tool_choice = self._decode_tool_choice(payload["tool_choice"])
+
+        # Decode structured-output constraint. Anthropic spells it two ways:
+        # the current ``output_format`` and the newer
+        # ``output_config.format`` (Claude Code already emits the former for
+        # its hook evaluators). Either one becomes ``ir.response_format`` so
+        # non-Anthropic targets can re-emit the constraint; dropping it lets
+        # a JSON-only caller receive prose.
+        structured = payload.get("output_format")
+        if not isinstance(structured, dict):
+            config_block = payload.get("output_config")
+            if isinstance(config_block, dict):
+                structured = config_block.get("format")
+        if isinstance(structured, dict):
+            ir.response_format = self._decode_response_format(structured)
 
         # Decode thinking config. sub2api semantics: an explicit
         # ``thinking.type: "disabled"`` overrides everything (effort "none");
@@ -363,6 +378,25 @@ class AnthropicMessagesDecoder:
             config.stop_sequences = payload["stop_sequences"]
 
         return config
+
+    def _decode_response_format(
+        self, output_format: Dict[str, Any]
+    ) -> IRResponseFormat:
+        """Decode Anthropic ``output_format`` / ``output_config.format``.
+
+        Anthropic carries the schema inline under ``schema``, unlike OpenAI
+        Chat's ``json_schema.schema`` wrapper. A bare ``{"type": "text"}`` is
+        the absence of a constraint and stays as the IR default.
+        """
+        fmt_type = str(output_format.get("type", "text"))
+        ir_format = IRResponseFormat(type=fmt_type)
+
+        if fmt_type == "json_schema":
+            ir_format.json_schema = output_format.get("schema")
+            ir_format.schema_name = output_format.get("name")
+            ir_format.strict = bool(output_format.get("strict", False))
+
+        return ir_format
 
     def _decode_tools(self, tools: List[Dict[str, Any]]) -> List[IRToolDeclaration]:
         """Decode tool declarations."""
@@ -723,6 +757,22 @@ class AnthropicMessagesEncoder:
                     }
             elif model_lower.find("claude") != -1:
                 payload["output_config"] = {"effort": "low"}
+
+        # Structured output: Chat's response_format / Responses' text.format
+        # become Anthropic's top-level ``output_format``. Emit after the
+        # thinking block so a preceding ``output_config`` assignment cannot
+        # discard it; the schema is inline (Anthropic has no
+        # ``{"json_schema": {...}}`` wrapper).
+        if ir.response_format and ir.response_format.type == "json_schema":
+            structured_output: Dict[str, Any] = {
+                "type": "json_schema",
+                "schema": ir.response_format.json_schema,
+            }
+            if ir.response_format.schema_name:
+                structured_output["name"] = ir.response_format.schema_name
+            if ir.response_format.strict:
+                structured_output["strict"] = True
+            payload["output_format"] = structured_output
 
         # User ID in metadata
         if ir.user:

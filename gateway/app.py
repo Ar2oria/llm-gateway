@@ -151,6 +151,96 @@ def _build_upstream_headers(client_headers: dict,
     return headers
 
 
+def _requests_structured_output(data: dict, protocol: Protocol) -> bool:
+    """Whether the request pins a JSON schema instead of free text.
+
+    A structured-output call is machine-facing: the caller reads a parsed
+    object, and its own system prompt is the instruction that produces that
+    object. Replacing it with a persona template strips the only instruction
+    the caller depends on, so the template is skipped for these requests.
+
+    The three protocols spell the constraint differently — Anthropic
+    ``output_format`` / ``output_config.format``, Responses ``text.format``,
+    Chat ``response_format``. A ``{"type": "text"}`` format is the absence of
+    a constraint and does not count.
+    """
+    if protocol == Protocol.ANTHROPIC_MESSAGES:
+        candidates = [data.get("output_format")]
+        config = data.get("output_config")
+        if isinstance(config, dict):
+            candidates.append(config.get("format"))
+    elif protocol == Protocol.OPENAI_RESPONSES:
+        text = data.get("text")
+        candidates = [text.get("format") if isinstance(text, dict) else None]
+    else:
+        candidates = [data.get("response_format")]
+
+    for candidate in candidates:
+        if isinstance(candidate, dict) and candidate.get("type") not in (None, "text"):
+            return True
+    return False
+
+
+def _rewrite_system_prompt(data, effective_prompt, final_protocol):
+    if final_protocol == Protocol.ANTHROPIC_MESSAGES:
+        # Anthropic accepts ``system`` as a string or as text blocks.
+        # Emit a single block carrying a cache breakpoint: a bare string
+        # would discard whatever cache_control the client sent and leave
+        # the upstream with no marker for the system prefix.
+        data["system"] = [
+            {
+                "type": "text",
+                "text": effective_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+    elif final_protocol == Protocol.OPENAI_RESPONSES:
+        # Responses has two system channels: the top-level
+        # ``instructions`` string and SYSTEM-role items inside ``input``.
+        # Both must go, or the client's prompt survives alongside the
+        # injected one. Clients put those items at the head of the array;
+        # only the first four are considered — anything later is real
+        # conversation and stays untouched.
+        data.pop("instructions", None)
+        items = data.get("input")
+        if isinstance(items, list):
+            kept = [
+                item
+                for index, item in enumerate(items)
+                if not (
+                        index < 4
+                        and isinstance(item, dict)
+                        and item.get("role") in ("system", "developer")
+                )
+            ]
+            if len(kept) != len(items):
+                data["input"] = kept
+        data["instructions"] = effective_prompt
+    else:
+        # Chat accepts system content only at the head of ``messages``,
+        # and clients may send ``system`` or ``developer`` there. Drop
+        # both from the first four entries, then put the injected prompt
+        # in slot 0. Later system/developer turns are conversation, not a
+        # system prompt, and stay untouched.
+        messages = data.get("messages")
+        if isinstance(messages, list):
+            kept = [
+                msg
+                for index, msg in enumerate(messages)
+                if not (
+                        index < 4
+                        and isinstance(msg, dict)
+                        and msg.get("role") in ("system", "developer")
+                )
+            ]
+            if len(kept) != len(messages):
+                messages = kept
+            messages.insert(0, {"role": "system", "content": effective_prompt})
+            data["messages"] = messages
+        else:
+            data["messages"] = [{"role": "system", "content": effective_prompt}]
+
+
 def _rewrite_body(data: dict,
                   endpoint: EndpointConfig,
                   convert_stats: ConvertStats,
@@ -176,64 +266,12 @@ def _rewrite_body(data: dict,
 
     effective_prompt = system_prompt if system_prompt is not None else endpoint.system_prompt
     final_protocol = convert_stats.target or convert_stats.source
-    if effective_prompt:
-        if final_protocol == Protocol.ANTHROPIC_MESSAGES:
-            # Anthropic accepts ``system`` as a string or as text blocks.
-            # Emit a single block carrying a cache breakpoint: a bare string
-            # would discard whatever cache_control the client sent and leave
-            # the upstream with no marker for the system prefix.
-            data["system"] = [
-                {
-                    "type": "text",
-                    "text": effective_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ]
-        elif final_protocol == Protocol.OPENAI_RESPONSES:
-            # Responses has two system channels: the top-level
-            # ``instructions`` string and SYSTEM-role items inside ``input``.
-            # Both must go, or the client's prompt survives alongside the
-            # injected one. Clients put those items at the head of the array;
-            # only the first four are considered — anything later is real
-            # conversation and stays untouched.
-            data.pop("instructions", None)
-            items = data.get("input")
-            if isinstance(items, list):
-                kept = [
-                    item
-                    for index, item in enumerate(items)
-                    if not (
-                        index < 4
-                        and isinstance(item, dict)
-                        and item.get("role") in ("system", "developer")
-                    )
-                ]
-                if len(kept) != len(items):
-                    data["input"] = kept
-            data["instructions"] = effective_prompt
-        else:
-            # Chat accepts system content only at the head of ``messages``,
-            # and clients may send ``system`` or ``developer`` there. Drop
-            # both from the first four entries, then put the injected prompt
-            # in slot 0. Later system/developer turns are conversation, not a
-            # system prompt, and stay untouched.
-            messages = data.get("messages")
-            if isinstance(messages, list):
-                kept = [
-                    msg
-                    for index, msg in enumerate(messages)
-                    if not (
-                        index < 4
-                        and isinstance(msg, dict)
-                        and msg.get("role") in ("system", "developer")
-                    )
-                ]
-                if len(kept) != len(messages):
-                    messages = kept
-                messages.insert(0, {"role": "system", "content": effective_prompt})
-                data["messages"] = messages
-            else:
-                data["messages"] = [{"role": "system", "content": effective_prompt}]
+    # Structured-output requests keep their own system prompt: it is the
+    # instruction that makes the caller's schema reproducible, and a persona
+    # template would displace it.
+    if effective_prompt and not _requests_structured_output(data, final_protocol):
+        _rewrite_system_prompt(data, effective_prompt, final_protocol)
+
     if extra_body and convert_stats.need_convert():
         # Extra params win over converted defaults (e.g. a pinned
         # reasoning.effort from output_config vs a configured one).

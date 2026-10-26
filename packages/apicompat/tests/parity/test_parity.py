@@ -47,6 +47,11 @@ _SKIPPED_CASES = {
         "thinking.budget_tokens is intentionally no longer maintained",
     "responses_to_anthropic_request__r2ar_reasoning_xhigh":
         "thinking.budget_tokens is intentionally no longer maintained",
+    # sub2api clamps `max` down to `xhigh`; this gateway forwards `max` so
+    # Claude Code's selected thinking depth reaches upstreams that accept it.
+    # The divergence is deliberate (commit b83d80a), not a regression.
+    "anthropic_to_responses_request__a2r_output_config_max":
+        "`max` effort is intentionally forwarded instead of clamped to `xhigh`",
 }
 
 # Randomly generated ids (Go: 12 random bytes hex) and wall-clock stamps —
