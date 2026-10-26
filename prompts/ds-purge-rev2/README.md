@@ -1,0 +1,1 @@
+基于 ds-purge-re 的伪代码化重写版，相对 ds-purge-re 压到 **52%**
