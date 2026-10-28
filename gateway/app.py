@@ -22,11 +22,13 @@ from gateway.config import (
 )
 from gateway.convert import (
     ConversionFailed,
+    UnsupportedPath,
     convert_request_body,
     convert_response_body,
     convert_sse_chunks,
     encode_stream_terminator,
     get_convert_stats,
+    require_supported,
     ConvertStats,
     Protocol
 )
@@ -620,6 +622,28 @@ def build_app(
     async def proxy_request(request: Request) -> Response:
         global working_model
 
+        # Only the three inference protocols are proxied. Reject everything
+        # else before touching the body: Files/count_tokens/batch requests
+        # carry multipart or binary payloads that json.loads would blow up on
+        # (500), and on paths like /v1/files a *successful* parse would be
+        # worse — conversion rewrote the path to /v1/responses and the body to
+        # an empty `input` list, so the client got a bogus 200 instead of an
+        # error. Decline honestly instead.
+        #
+        # Classification happens here because the body is unreadable for
+        # unsupported paths; `source_format` is reused below so the path is
+        # matched exactly once per request.
+        path = request.url.path
+        try:
+            source_format = require_supported(path)
+        except UnsupportedPath:
+            return error(
+                501,
+                f"unsupported path '{path}': this gateway only proxies "
+                "/v1/messages, /v1/responses and /v1/chat/completions "
+                "(plus GET /v1/models)",
+            )
+
         raw = "{}"
         if request.method not in WITH_BODY_METHODS:
             if working_model is None:
@@ -630,7 +654,9 @@ def build_app(
         # request body
         try:
             data = json.loads(raw)
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            # UnicodeDecodeError: a non-UTF-8 (multipart/binary) body that
+            # json.loads rejects before JSON parsing even starts.
             return error(400, "request body is not valid JSON")
         if not isinstance(data, dict):
             return error(400, "request body must be a JSON object")
@@ -651,14 +677,13 @@ def build_app(
             return error(404, f"model '{model}' is not configured")
 
         # request path
-        path = request.url.path
         if store.config.debug_log:
             qs = ("?" + request.url.query) if request.url.query else ""
             logger.debug("request: %s %s%s, model: %s",
                          request.method, path, qs, working_model)
 
         # final url
-        convert_stats = get_convert_stats(path, endpoint.protocol)
+        convert_stats = get_convert_stats(path, endpoint.protocol, source_format)
         upstream_path_ = convert_stats.get_target_path()
         upstream_url = endpoint.base_url + upstream_path_
         if request.url.query:

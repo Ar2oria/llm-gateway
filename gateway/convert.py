@@ -62,9 +62,41 @@ class ConversionFailed(Exception):
     """Request/response conversion failed (client-visible; do not proxy)."""
 
 
-def get_convert_stats(path: str, pinned_protocol: str | None) -> ConvertStats:
+class UnsupportedPath(Exception):
+    """The request path is not one of the three proxied protocol endpoints.
+
+    Raised by :func:`require_supported` (and by :func:`get_convert_stats` when
+    it has to detect the format itself) so callers cannot accidentally build a
+    ConvertStats with an unknown source protocol — the old code fell back to
+    OpenAI, which silently forwarded files/batch/count_tokens requests to the
+    chat endpoint.
+    """
+
+
+def require_supported(path: str) -> str:
+    """Return the path's source format, or raise :class:`UnsupportedPath`.
+
+    The proxy calls this *before* reading the request body (an unsupported
+    path may carry a multipart/binary payload), then hands the returned format
+    to :func:`get_convert_stats` so the path is classified exactly once.
+    """
+    fmt = detect_format(path)
+    if fmt is None:
+        raise UnsupportedPath(path)
+    return fmt
+
+
+def get_convert_stats(path: str, pinned_protocol: str | None,
+                      source_format: str | None = None) -> ConvertStats:
+    """Build the conversion plan for one request.
+
+    ``source_format`` is the value a previous :func:`require_supported` call
+    returned; pass it to avoid detecting the path twice. When omitted the
+    format is detected here (and an unsupported path raises).
+    """
+    fmt = require_supported(path) if source_format is None else source_format
     target = Protocol[pinned_protocol.upper()] if pinned_protocol is not None else None
-    return ConvertStats(path, FORMAT_TO_PROTOCOL[detect_format(path)], target)
+    return ConvertStats(path, FORMAT_TO_PROTOCOL[fmt], target)
 
 
 def convert_request_body(

@@ -1205,21 +1205,49 @@ def test_models_list_head_supported():
     assert resp.status_code == 200
 
 
-def test_models_list_post_still_proxies():
-    captured = {}
+def test_models_list_post_is_not_proxied():
+    """POST /v1/models is not a protocol path: it must 501, not be forwarded.
+
+    /v1/models is a gateway-local listing endpoint (GET/HEAD only). A POST to
+    it used to fall through to the catch-all and be proxied to
+    {base_url}/v1/models, which is not something the upstream serves either.
+    """
+    calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        captured["url"] = str(request.url)
-        return httpx.Response(
-            200,
-            headers={"content-type": "application/json"},
-            stream=httpx.ByteStream(b"{}"),
-        )
+        calls.append(str(request.url))
+        return httpx.Response(200, json={})
 
     client = make_client(handler)
     resp = client.post("/v1/models", json={"model": "gpt-4o", "messages": []})
-    assert resp.status_code == 200
-    assert captured["url"] == "https://upstream.example/v1/models"
+    assert resp.status_code == 501
+    assert calls == []
+
+
+def test_unsupported_path_returns_501_without_reading_multipart():
+    """Files-API uploads (multipart/binary) are 501, never a 500 or a proxied 200.
+
+    Regression: ``json.loads`` on a PNG body raised UnicodeDecodeError (500),
+    and for a pinned model a parseable body was forwarded to /v1/responses
+    with an empty ``input`` list — a bogus success. Neither may happen.
+    """
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(200, json={})
+
+    client = make_client(handler)
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 400
+
+    upload = client.post("/v1/files", files={"file": ("a.png", png, "image/png")})
+    assert upload.status_code == 501
+    assert "message" in upload.json()["error"]
+
+    count = client.post("/v1/messages/count_tokens",
+                        json={"model": "gpt-4o", "messages": []})
+    assert count.status_code == 501
+    assert calls == []
 
 
 def test_nonstream_usage_recorded(tmp_path):
@@ -1502,9 +1530,28 @@ def test_detect_format_accepts_trailing_slash_and_prefix():
     assert detect_format("/proxy/anthropic/v1/messages/") == "anthropic"
     assert detect_format("/v1/responses/") == "responses"
     assert detect_format("/openai/v1/responses") == "responses"
-    # Suffix matching must not turn lookalike paths into protocol routes.
-    assert detect_format("/v1/messages-extra") == "openai"
-    assert detect_format("/v1/responses-extra") == "openai"
+    assert detect_format("/v1/chat/completions/") == "openai"
+
+
+def test_detect_format_rejects_every_other_path():
+    """Only the three protocol endpoints are recognised — no OpenAI fallback.
+
+    The old fallback classified anything unknown as OpenAI, which silently
+    forwarded Files/count_tokens/batch requests to /v1/chat/completions (or,
+    for a pinned model, rewrote the path to /v1/responses) with a converted
+    body. Unsupported paths must be recognisable so the proxy can 501 them.
+    """
+    # Lookalikes must not match.
+    assert detect_format("/v1/messages-extra") is None
+    assert detect_format("/v1/responses-extra") is None
+    assert detect_format("/v1/chat/completions-extra") is None
+    # Real endpoints of the wider API surface: all unsupported.
+    assert detect_format("/v1/models") is None
+    assert detect_format("/v1/files") is None
+    assert detect_format("/v1/files/file-abc/content") is None
+    assert detect_format("/v1/messages/count_tokens") is None
+    assert detect_format("/v1/batches") is None
+    assert detect_format("/") is None
 
 
 def test_router_exact_match():

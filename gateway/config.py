@@ -18,6 +18,18 @@ class ModelNotFoundError(Exception):
 
 ANTHROPIC_PATH = "/v1/messages"
 RESPONSES_PATH = "/v1/responses"
+OPENAI_CHAT_PATH = "/v1/chat/completions"
+
+#: The only request paths the gateway proxies, as strict suffixes. Everything
+#: else (Anthropic/OpenAI Files, ``count_tokens``, batch, …) is rejected with
+#: 501: the gateway speaks exactly three inference protocols plus GET
+#: ``/v1/models``, and silently treating unknown paths as OpenAI — the old
+#: fallback — forwarded them to ``/v1/responses`` with a rewritten body.
+_PROTOCOL_SUFFIXES: tuple[tuple[str, str], ...] = (
+    (ANTHROPIC_PATH, "anthropic"),
+    (RESPONSES_PATH, "responses"),
+    (OPENAI_CHAT_PATH, "openai"),
+)
 
 #: Protocol identifiers a model can be pinned to. The request path's detected
 #: format is compared against the model's pinned protocol; a mismatch triggers
@@ -27,19 +39,23 @@ RESPONSES_PATH = "/v1/responses"
 PROTOCOL_VALUES: list[str] = [e.value for e in Protocol]
 
 
-def detect_format(path: str) -> str:
-    """Classify a request path as anthropic / responses / openai.
+def detect_format(path: str) -> str | None:
+    """Classify a request path as anthropic / responses / openai, or None.
 
     Match the protocol suffix rather than requiring an exact path: gateways
     are often mounted behind a prefix (e.g. ``/anthropic/v1/messages``), and
     clients may include a trailing slash.
+
+    Returns None for any path that is not one of the three supported protocol
+    endpoints. Callers must treat None as "not proxied" (501) — there is
+    deliberately no fallback, so lookalike paths (``/v1/messages-extra``,
+    ``/v1/messages/count_tokens``, ``/v1/files``) are never routed as OpenAI.
     """
     normalized = path.rstrip("/") or "/"
-    if normalized.endswith(ANTHROPIC_PATH):
-        return "anthropic"
-    if normalized.endswith(RESPONSES_PATH):
-        return "responses"
-    return "openai"
+    for suffix, fmt in _PROTOCOL_SUFFIXES:
+        if normalized.endswith(suffix):
+            return fmt
+    return None
 
 
 class ModelRouter:
