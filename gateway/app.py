@@ -138,8 +138,8 @@ def _rewrite_headers(client_headers: dict,
     # 把传入的apikey视为本地网关的校验位，如果传入了apikey并且可以正常匹配，替换成自定义头中的apikey
     # 否则保持请求头中的内容正常传递
     if sentinel_sent:
-        del headers["authorization"]
-        del headers["x-api-key"]
+        headers["authorization"] = ""
+        headers["x-api-key"] = ""
         headers.update(custom_headers)
     else:
         headers.update(custom_headers)
