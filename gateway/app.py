@@ -104,39 +104,8 @@ def _build_upstream_headers(client_headers: dict,
         k.lower(): v for k, v in client_headers.items()
         if k.lower() not in HOP_BY_HOP_HEADERS
     }
-    request_auth = headers.get("authorization", "")
-    request_apikey = headers.get("x-api-key", "")
 
-    auth_value = request_auth[7:].strip() if request_auth.lower().startswith("bearer ") \
-        else request_auth.strip()
-    sentinel_sent = (
-        auth_value == api_key
-        or request_apikey.strip() == api_key
-    )
-
-    custom_headers = {
-        k.lower(): v for k, v in endpoint.custom_headers.items()
-    }
-
-    if sentinel_sent:
-        headers["authorization"] = ""
-        headers["x-api-key"] = ""
-        headers.update(custom_headers)
-    else:
-        headers.update(custom_headers)
-        headers["authorization"] = request_auth
-        headers["x-api-key"] = request_apikey
-
-    if "x-api-key" not in headers or headers["x-api-key"] == "":
-        auth = headers.get("authorization", "")
-        key = auth[7:].strip() if auth.lower().startswith("bearer ") else auth.strip()
-        if key:
-            headers["x-api-key"] = key
-    if "authorization" not in headers or headers["authorization"] == "":
-        key = headers.get("x-api-key", "").strip()
-        if key:
-            headers["authorization"] = "bearer " + key
-
+    # 处理请求头中的编码
     accept_encoding = headers.get("accept-encoding", "")
     if accept_encoding:
         # The gateway must decompress upstream bodies for protocol
@@ -150,6 +119,44 @@ def _build_upstream_headers(client_headers: dict,
             if token.split(";", 1)[0].strip().lower() in _DECODABLE_ENCODINGS
         ]
         headers["accept-encoding"] = ", ".join(kept) if kept else "identity"
+
+    custom_headers = {
+        k.lower(): v for k, v in endpoint.custom_headers.items()
+    }
+
+    # reset api key
+    request_auth = headers.get("authorization", "")
+    request_apikey = headers.get("x-api-key", "")
+
+    auth_apikey = request_auth[7:].strip() if request_auth.lower().startswith("bearer ") \
+        else request_auth.strip()
+    sentinel_sent = (
+        auth_apikey == api_key
+        or request_apikey.strip() == api_key
+    )
+
+    # 把传入的apikey视为本地网关的校验位，如果传入了apikey并且可以正常匹配，替换成自定义头中的apikey
+    # 否则保持请求头中的内容正常传递
+    if sentinel_sent:
+        del headers["authorization"]
+        del headers["x-api-key"]
+        headers.update(custom_headers)
+    else:
+        headers.update(custom_headers)
+        headers["authorization"] = request_auth
+        headers["x-api-key"] = request_apikey
+
+    # 兼容两种协议验证头
+    if "x-api-key" not in headers or headers["x-api-key"] == "":
+        auth = headers.get("authorization", "")
+        key = auth[7:].strip() if auth.lower().startswith("bearer ") else auth.strip()
+        if key:
+            headers["x-api-key"] = key
+    if "authorization" not in headers or headers["authorization"] == "":
+        key = headers.get("x-api-key", "").strip()
+        if key:
+            headers["authorization"] = "bearer " + key
+
     return headers
 
 
@@ -640,8 +647,8 @@ def build_app(
             return error(
                 501,
                 f"unsupported path '{path}': this gateway only proxies "
-                "/v1/messages, /v1/responses and /v1/chat/completions "
-                "(plus GET /v1/models)",
+                "/v1/messages, /v1/responses , /v1/chat/completions "
+                "and /v1/models",
             )
 
         raw = "{}"
