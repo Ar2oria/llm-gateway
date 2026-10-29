@@ -935,10 +935,10 @@ def test_debug_log_logs_full_request(caplog):
     assert "request: POST /v1/chat/completions?x=1" in caplog.text
     assert '"model": "m"' in caplog.text
     assert '"content": "hello"' in caplog.text
-    assert "client_headers:" in caplog.text
-    assert "final_headers:" in caplog.text
-    assert "client_body:" in caplog.text
-    assert "final_body:" in caplog.text
+    assert "客户端请求头:" in caplog.text
+    assert "转换后的请求头:" in caplog.text
+    assert "客户端请求body:" in caplog.text
+    assert "转换后的请求body:" in caplog.text
 
 
 def test_debug_log_json_body_included(caplog):
@@ -961,7 +961,7 @@ def test_debug_log_json_body_included(caplog):
     )
     assert '"model": "m"' in caplog.text
     assert '"content": "hello"' in caplog.text
-    assert "client_body:" in caplog.text
+    assert "客户端请求body:" in caplog.text
 
 
 def test_debug_log_non_json_body_rejected(caplog):

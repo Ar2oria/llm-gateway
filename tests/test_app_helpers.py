@@ -4,6 +4,8 @@ These pin the helper contracts at the unit level; the HTTP-level behavior
 tests (full proxy round-trips) live in test_app.py.
 """
 
+import asyncio
+
 import pytest
 
 from gateway.app import _rewrite_headers, _reasoning_effort, _rewrite_body
@@ -15,6 +17,29 @@ def make_endpoint(**kwargs) -> EndpointConfig:
     kwargs.setdefault("model", "m")
     kwargs.setdefault("base_url", "https://up.example")
     return EndpointConfig(**kwargs)
+
+
+class _StubPromptStore:
+    """Stands in for ``app.state.prompt_templates`` in _rewrite_body.
+
+    ``bodies`` maps template name → resolved body; a name that is absent
+    resolves to None, which is what a template-less or blank template yields
+    in production (and triggers the endpoint.system_prompt fallback).
+    """
+
+    def __init__(self, bodies: dict[str, str] | None = None) -> None:
+        self.bodies = bodies or {}
+
+    async def aget_prompt(self, name: str) -> str | None:
+        return self.bodies.get(name)
+
+
+class _StubApp:
+    """Minimal stand-in exposing only what _rewrite_body reads from the app."""
+
+    def __init__(self, bodies: dict[str, str] | None = None) -> None:
+        self.state = type("state", (), {})()
+        self.state.prompt_templates = _StubPromptStore(bodies)
 
 
 # --- _build_upstream_headers ---
@@ -132,12 +157,27 @@ def test_accept_encoding_wildcard_not_forwarded():
 
 
 def test_accept_encoding_from_custom_headers_sanitized():
+    """custom_headers may carry accept-encoding too — it must be filtered.
+
+    Filtering only the client's value let an endpoint configured with
+    ``Accept-Encoding: gzip, br`` reach the upstream with br intact, which the
+    gateway cannot decode for conversion/capture.
+    """
     h = _rewrite_headers(
         {"Accept-Encoding": "gzip"},
         make_endpoint(custom_headers={"Accept-Encoding": "gzip, br"}),
         "apikey",
     )
     assert h["accept-encoding"] == "gzip"
+
+
+def test_accept_encoding_only_br_from_custom_headers_becomes_identity():
+    h = _rewrite_headers(
+        {"Accept-Encoding": "gzip"},
+        make_endpoint(custom_headers={"Accept-Encoding": "br"}),
+        "apikey",
+    )
+    assert h["accept-encoding"] == "identity"
 
 
 # --- _rewrite_body ---
@@ -158,9 +198,20 @@ def test_reasoning_effort_extracts_final_upstream_shape(body, expected):
 # --- _rewrite_body ---
 
 def rewrite(data, endpoint, path="/v1/chat/completions", target=None, extra_body=None,
-            system_prompt=None):
-    _rewrite_body(data, endpoint, get_convert_stats(path, target), extra_body,
-                  system_prompt=system_prompt)
+            system_prompt=None, templates=None):
+    """Run _rewrite_body and return the mutated body.
+
+    ``system_prompt`` used to be a direct argument; it is now resolved inside
+    _rewrite_body from the injected template (via app.state) falling back to
+    ``endpoint.system_prompt``. To keep these tests expressing "an override
+    prompt of X", install it as the endpoint's template body.
+    """
+    if system_prompt is not None:
+        endpoint.prompt_template = "test-template"
+        templates = dict(templates or {})
+        templates["test-template"] = system_prompt
+    asyncio.run(_rewrite_body(_StubApp(templates), endpoint, data,
+                              get_convert_stats(path, target), extra_body))
     return data
 
 
@@ -287,6 +338,27 @@ def test_rewrite_body_responses_leaves_input_alone_without_a_prompt():
     payload = {"model": "m", "instructions": "client", "input": [_msg("developer", "d0")]}
     out = rewrite(dict(payload),
                   make_endpoint(), path="/v1/responses", system_prompt=None)
+    assert out == payload
+
+
+@pytest.mark.parametrize("path,payload", [
+    ("/v1/messages", {"model": "m", "system": "client",
+                      "messages": [{"role": "user", "content": "hi"}]}),
+    ("/v1/responses", {"model": "m", "instructions": "client",
+                       "input": [_msg("developer", "d0")]}),
+    ("/v1/chat/completions", {"model": "m", "messages": [
+        {"role": "system", "content": "client"},
+        {"role": "user", "content": "hi"}]}),
+])
+def test_rewrite_body_without_any_prompt_preserves_client_system(path, payload):
+    """Regression: no template and no endpoint.system_prompt must be a no-op.
+
+    An earlier refactor called _rewrite_system_prompt unconditionally, which
+    deletes the client's instructions/system item first (to make room for an
+    injected prompt) and then writes the None/"" it was given — silently
+    wiping the caller's system prompt on every such request.
+    """
+    out = rewrite(dict(payload), make_endpoint(), path=path, system_prompt=None)
     assert out == payload
 
 

@@ -105,21 +105,6 @@ def _rewrite_headers(client_headers: dict,
         if k.lower() not in HOP_BY_HOP_HEADERS
     }
 
-    # 处理请求头中的编码
-    accept_encoding = headers.get("accept-encoding", "")
-    if accept_encoding:
-        # The gateway must decompress upstream bodies for protocol
-        # conversion and usage capture, but only handles gzip/deflate.
-        # Strip br/zstd (and the '*'-any wildcard) from the forwarded
-        # accept-encoding so the upstream never picks an encoding we
-        # can't decode — otherwise buffered conversion fails with a
-        # 502 "upstream returned non-JSON for protocol conversion".
-        kept = [
-            token.strip() for token in accept_encoding.split(",")
-            if token.split(";", 1)[0].strip().lower() in _DECODABLE_ENCODINGS
-        ]
-        headers["accept-encoding"] = ", ".join(kept) if kept else "identity"
-
     custom_headers = {
         k.lower(): v for k, v in endpoint.custom_headers.items()
     }
@@ -156,6 +141,17 @@ def _rewrite_headers(client_headers: dict,
         key = headers.get("x-api-key", "").strip()
         if key:
             headers["authorization"] = "bearer " + key
+
+    # 处理请求头中的编码 —— 必须放在 custom_headers 合并之后：
+    # custom_headers 也可能携带 accept-encoding，若只过滤客户端值，
+    # 上游仍可能按端点配置返回 br/zstd，网关解不了 → 转换/统计失败。
+    accept_encoding = headers.get("accept-encoding", "")
+    if accept_encoding:
+        kept = [
+            token.strip() for token in accept_encoding.split(",")
+            if token.split(";", 1)[0].strip().lower() in _DECODABLE_ENCODINGS
+        ]
+        headers["accept-encoding"] = ", ".join(kept) if kept else "identity"
 
     return headers
 
@@ -276,11 +272,6 @@ async def _rewrite_body(app: FastAPI,
 
     final_protocol = convert_stats.target or convert_stats.source
     if not _requests_structured_output(data, final_protocol):
-        # Injected template body wins over endpoint.system_prompt; a
-        # missing/blank/unreadable template (get_prompt → None) falls
-        # back to the handwritten prompt inside _rewrite_body. Reads go
-        # through the store's in-memory cache, so only a cold miss
-        # touches the disk.
         prompt_body = None
         if endpoint.prompt_template:
             # aget_prompt: 冷缓存时可能执行模板钩子（最长 30s），必须让出
@@ -289,16 +280,10 @@ async def _rewrite_body(app: FastAPI,
                 endpoint.prompt_template
             )
         prompt_body = prompt_body if prompt_body is not None else endpoint.system_prompt
-        _rewrite_system_prompt(data, prompt_body, final_protocol)
+        if prompt_body:
+            _rewrite_system_prompt(data, prompt_body, final_protocol)
 
     if extra_body and convert_stats.need_convert():
-        # Extra params win over converted defaults (e.g. a pinned
-        # reasoning.effort from output_config vs a configured one).
-        # A value of `null` DELETES the field rather than setting it to
-        # null — some upstreams (e.g. opencode's Go backend) reject the
-        # parameter name itself (even `stop: null` / `stop: ""` → 400
-        # "unknown parameter 'stop'"), so users configure
-        # {"openai_responses": {"stop": null}} to strip the field.
         extra = extra_body.get(final_protocol.value)
         if extra:
             for key, value in extra.items():
