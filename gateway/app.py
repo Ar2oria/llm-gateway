@@ -23,7 +23,7 @@ from gateway.config import (
 from gateway.convert import (
     ConversionFailed,
     UnsupportedPath,
-    convert_request_body,
+    protocol_convert,
     convert_response_body,
     convert_sse_chunks,
     encode_stream_terminator,
@@ -83,9 +83,9 @@ def _decompressor(encoding: str) -> tuple[Callable[[bytes], bytes], Callable[[],
 _DECODABLE_ENCODINGS = {"gzip", "deflate", "identity"}
 
 
-def _build_upstream_headers(client_headers: dict,
-                            endpoint: EndpointConfig,
-                            api_key: str) -> dict[str, str]:
+def _rewrite_headers(client_headers: dict,
+                     endpoint: EndpointConfig,
+                     api_key: str) -> dict[str, str]:
     """Build upstream request headers from the client's (lowercased keys).
 
     Pipeline (order matters):
@@ -191,6 +191,7 @@ def _requests_structured_output(data: dict, protocol: Protocol) -> bool:
 
 
 def _rewrite_system_prompt(data, effective_prompt, final_protocol):
+    # 分协议处理系统提示词重写
     if final_protocol == Protocol.ANTHROPIC_MESSAGES:
         # Anthropic accepts ``system`` as a string or as text blocks.
         # Emit a single block carrying a cache breakpoint: a bare string
@@ -250,11 +251,11 @@ def _rewrite_system_prompt(data, effective_prompt, final_protocol):
             data["messages"] = [{"role": "system", "content": effective_prompt}]
 
 
-def _rewrite_body(data: dict,
-                  endpoint: EndpointConfig,
-                  convert_stats: ConvertStats,
-                  extra_body: dict,
-                  system_prompt: str | None = None):
+async def _rewrite_body(app: FastAPI,
+                        endpoint: EndpointConfig,
+                        data: dict,
+                        convert_stats: ConvertStats,
+                        extra_body: dict):
     """Rewrite the request body per model config, in place.
 
     `upstream_model` replaces the `model` field; the `system_prompt` argument
@@ -273,13 +274,22 @@ def _rewrite_body(data: dict,
     if endpoint.upstream_model:
         data["model"] = endpoint.upstream_model
 
-    effective_prompt = system_prompt if system_prompt is not None else endpoint.system_prompt
     final_protocol = convert_stats.target or convert_stats.source
-    # Structured-output requests keep their own system prompt: it is the
-    # instruction that makes the caller's schema reproducible, and a persona
-    # template would displace it.
-    if effective_prompt and not _requests_structured_output(data, final_protocol):
-        _rewrite_system_prompt(data, effective_prompt, final_protocol)
+    if not _requests_structured_output(data, final_protocol):
+        # Injected template body wins over endpoint.system_prompt; a
+        # missing/blank/unreadable template (get_prompt → None) falls
+        # back to the handwritten prompt inside _rewrite_body. Reads go
+        # through the store's in-memory cache, so only a cold miss
+        # touches the disk.
+        prompt_body = None
+        if endpoint.prompt_template:
+            # aget_prompt: 冷缓存时可能执行模板钩子（最长 30s），必须让出
+            # 事件循环 —— 同步版会阻塞所有并发请求。
+            prompt_body = await app.state.prompt_templates.aget_prompt(
+                endpoint.prompt_template
+            )
+        prompt_body = prompt_body if prompt_body is not None else endpoint.system_prompt
+        _rewrite_system_prompt(data, prompt_body, final_protocol)
 
     if extra_body and convert_stats.need_convert():
         # Extra params win over converted defaults (e.g. a pinned
@@ -337,7 +347,7 @@ def _debug_log_request(client_headers: dict, final_headers: dict,
     """
 
     logger.debug(
-        "client_headers:%s\nfinal_headers:%s\nclient_body:%s\nfinal_body:%s",
+        "客户端请求头:\n%s\n转换后的请求头:\n%s\n客户端请求body:\n%s\n转换后的请求body:\n%s\n" + "="*20,
         json.dumps(client_headers), json.dumps(final_headers),
         json.dumps(client_body), json.dumps(final_body)
     )
@@ -698,29 +708,17 @@ def build_app(
 
         # final headers
         origin_headers = {k.lower(): v for k, v in request.headers.items()}
-        headers = _build_upstream_headers(origin_headers, endpoint, store.config.api_key)
+        headers = _rewrite_headers(origin_headers, endpoint, store.config.api_key)
 
         # final body
         body = {}
         if len(data.keys()) > 0:
             try:
-                body = convert_request_body(convert_stats, data)
+                body = protocol_convert(convert_stats, data)
             except ConversionFailed as exc:
                 return error(400, str(exc))
-            # Injected template body wins over endpoint.system_prompt; a
-            # missing/blank/unreadable template (get_prompt → None) falls
-            # back to the handwritten prompt inside _rewrite_body. Reads go
-            # through the store's in-memory cache, so only a cold miss
-            # touches the disk.
-            prompt_body = None
-            if endpoint.prompt_template:
-                # aget_prompt: 冷缓存时可能执行模板钩子（最长 30s），必须让出
-                # 事件循环 —— 同步版会阻塞所有并发请求。
-                prompt_body = await app.state.prompt_templates.aget_prompt(
-                    endpoint.prompt_template
-                )
-            _rewrite_body(body, endpoint, convert_stats, store.config.extra_body,
-                          system_prompt=prompt_body)
+
+            await _rewrite_body(app, endpoint, body, convert_stats, store.config.extra_body)
         if store.config.debug_log:
             _debug_log_request(origin_headers, headers, data, body)
 

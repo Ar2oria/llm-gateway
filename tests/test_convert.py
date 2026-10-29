@@ -7,11 +7,11 @@ import json
 import pytest
 
 from gateway.convert import (
-    ConversionFailed,
-    convert_request_body,
-    convert_response_body,
-    convert_sse_chunks,
-    get_convert_stats,
+	ConversionFailed,
+	protocol_convert,
+	convert_response_body,
+	convert_sse_chunks,
+	get_convert_stats,
 )
 
 
@@ -21,7 +21,7 @@ from gateway.convert import (
 
 def test_openai_chat_to_anthropic_request_body():
     stats = get_convert_stats("/v1/chat/completions", "anthropic_messages")
-    data = convert_request_body(stats, {
+    data = protocol_convert(stats, {
         "model": "gpt-4o",
         "messages": [
             {"role": "system", "content": "sys"},
@@ -39,7 +39,7 @@ def test_openai_chat_to_anthropic_request_body():
 
 def test_anthropic_to_openai_request_body():
     stats = get_convert_stats("/v1/messages", "openai_chat")
-    data = convert_request_body(stats, {
+    data = protocol_convert(stats, {
         "model": "claude-3",
         "messages": [{"role": "user", "content": "hi"}],
         "max_tokens": 100,
@@ -58,7 +58,7 @@ def test_anthropic_system_role_message_survives_as_user_content():
     conversion — sub2api maps unknown roles to user content, so the text is
     never silently dropped."""
     stats = get_convert_stats("/v1/messages", "openai_chat")
-    data = convert_request_body(stats, {
+    data = protocol_convert(stats, {
         "model": "claude-3",
         "messages": [
             {"role": "user", "content": "hi"},
@@ -75,7 +75,7 @@ def test_anthropic_system_role_message_to_responses_uses_input_text():
     USER message items with input_text content (sub2api maps unknown roles
     to user) — the text survives instead of being dropped."""
     stats = get_convert_stats("/v1/messages", "openai_responses")
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "claude-3",
         "messages": [
             {"role": "user", "content": "hi"},
@@ -97,7 +97,7 @@ def test_anthropic_top_k_dropped_in_openai_chat_conversion():
     (sub2api ChatCompletionsRequest carries no top_k). Endpoints that want
     it can add it back via server.extra_body."""
     stats = get_convert_stats("/v1/messages", "openai_chat")
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "m", "max_tokens": 100, "top_k": 40,
         "messages": [{"role": "user", "content": "hi"}],
     })
@@ -110,28 +110,28 @@ def test_anthropic_thinking_config_maps_to_reasoning_effort():
     "medium" default. budget_tokens alone does not select an effort."""
     stats = get_convert_stats("/v1/messages", "openai_chat")
     # adaptive (Claude Code) -> medium default
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "m", "max_tokens": 100,
         "thinking": {"type": "adaptive"},
         "messages": [{"role": "user", "content": "hi"}],
     })
     assert out.get("reasoning_effort") == "medium"
     # enabled + budget -> medium default (budget does not pick the effort)
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "m", "max_tokens": 100,
         "thinking": {"type": "enabled", "budget_tokens": 512},
         "messages": [{"role": "user", "content": "hi"}],
     })
     assert out.get("reasoning_effort") == "medium"
     # disabled -> "none"
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "m", "max_tokens": 100,
         "thinking": {"type": "disabled"},
         "messages": [{"role": "user", "content": "hi"}],
     })
     assert out.get("reasoning_effort") == "none"
     # output_config.effort wins over thinking-derived effort
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "m", "max_tokens": 100,
         "thinking": {"type": "adaptive"},
         "output_config": {"effort": "xhigh"},
@@ -149,7 +149,7 @@ def test_anthropic_effort_max_forwarded_unchanged():
     Code's selected thinking depth instead of silently weakening it.
     """
     stats = get_convert_stats("/v1/messages", "openai_responses")
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "m", "max_tokens": 100,
         "output_config": {"effort": "max"},
         "messages": [{"role": "user", "content": "hi"}],
@@ -157,7 +157,7 @@ def test_anthropic_effort_max_forwarded_unchanged():
     assert out.get("reasoning") == {"effort": "max", "summary": "auto"}
     # Chat direction forwards it unchanged too.
     stats = get_convert_stats("/v1/messages", "openai_chat")
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "m", "max_tokens": 100,
         "output_config": {"effort": "max"},
         "messages": [{"role": "user", "content": "hi"}],
@@ -169,14 +169,14 @@ def test_anthropic_adaptive_effort_clamped_to_xhigh_for_openai():
     """`adaptive` is Claude-only and has no upstream equivalent, so it still
     clamps to the largest value the OpenAI effort domain knows."""
     stats = get_convert_stats("/v1/messages", "openai_responses")
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "m", "max_tokens": 100,
         "output_config": {"effort": "adaptive"},
         "messages": [{"role": "user", "content": "hi"}],
     })
     assert out.get("reasoning") == {"effort": "xhigh", "summary": "auto"}
     stats = get_convert_stats("/v1/messages", "openai_chat")
-    out = convert_request_body(stats, {
+    out = protocol_convert(stats, {
         "model": "m", "max_tokens": 100,
         "output_config": {"effort": "adaptive"},
         "messages": [{"role": "user", "content": "hi"}],
@@ -188,7 +188,7 @@ def test_convert_request_missing_max_tokens_defaults_for_anthropic():
     """Anthropic requires max_tokens; a missing value defaults to 8192
     (sub2api behavior) instead of failing the conversion."""
     stats = get_convert_stats("/v1/chat/completions", "anthropic_messages")
-    data = convert_request_body(stats, {
+    data = protocol_convert(stats, {
         "model": "gpt-4o",
         "messages": [{"role": "user", "content": "hi"}],
     })
@@ -200,7 +200,7 @@ def test_no_conversion_when_path_matches_pinned_protocol():
     unchanged (no conversion)."""
     stats = get_convert_stats("/v1/messages", "anthropic_messages")
     data = {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
-    assert convert_request_body(stats, data) is data
+    assert protocol_convert(stats, data) is data
 
 
 # ---------------------------------------------------------------------------

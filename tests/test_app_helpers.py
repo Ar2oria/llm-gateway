@@ -6,7 +6,7 @@ tests (full proxy round-trips) live in test_app.py.
 
 import pytest
 
-from gateway.app import _build_upstream_headers, _reasoning_effort, _rewrite_body
+from gateway.app import _rewrite_headers, _reasoning_effort, _rewrite_body
 from gateway.config import EndpointConfig
 from gateway.convert import get_convert_stats
 
@@ -20,7 +20,7 @@ def make_endpoint(**kwargs) -> EndpointConfig:
 # --- _build_upstream_headers ---
 
 def test_hop_by_hop_headers_stripped():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Host": "127.0.0.1:8088", "Connection": "keep-alive",
          "Content-Length": "3", "Transfer-Encoding": "chunked",
          "Accept": "application/json"},
@@ -30,7 +30,7 @@ def test_hop_by_hop_headers_stripped():
 
 
 def test_custom_non_auth_headers_override_client_and_keys_lowercased():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Authorization": "Bearer client-key", "X-Custom": "abc"},
         make_endpoint(custom_headers={"X-Custom": "ep-value", "User-Agent": "ep-agent"}),
         "apikey",
@@ -40,7 +40,7 @@ def test_custom_non_auth_headers_override_client_and_keys_lowercased():
 
 
 def test_sentinel_authorization_activates_endpoint_auth():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Authorization": "Bearer apikey"},
         make_endpoint(custom_headers={"Authorization": "Bearer real"}),
         "apikey",
@@ -49,7 +49,7 @@ def test_sentinel_authorization_activates_endpoint_auth():
 
 
 def test_sentinel_x_api_key_activates_endpoint_auth():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"X-Api-Key": "apikey"},
         make_endpoint(custom_headers={"Authorization": "Bearer real"}),
         "apikey",
@@ -58,7 +58,7 @@ def test_sentinel_x_api_key_activates_endpoint_auth():
 
 
 def test_client_real_auth_wins_over_endpoint_auth_default():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Authorization": "Bearer wrong-key"},
         make_endpoint(custom_headers={"Authorization": "Bearer real"}),
         "apikey",
@@ -67,7 +67,7 @@ def test_client_real_auth_wins_over_endpoint_auth_default():
 
 
 def test_no_client_auth_is_not_backfilled_from_endpoint_auth():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Accept": "*/*"},
         make_endpoint(custom_headers={"Authorization": "Bearer real"}),
         "apikey",
@@ -76,7 +76,7 @@ def test_no_client_auth_is_not_backfilled_from_endpoint_auth():
 
 
 def test_sentinel_without_endpoint_auth_sends_no_auth():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Authorization": "Bearer apikey"},
         make_endpoint(custom_headers={"User-Agent": "ua"}),
         "apikey",
@@ -85,7 +85,7 @@ def test_sentinel_without_endpoint_auth_sends_no_auth():
 
 
 def test_x_api_key_only_derives_authorization():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"X-Api-Key": "client-key"},
         make_endpoint(),
         "apikey",
@@ -94,7 +94,7 @@ def test_x_api_key_only_derives_authorization():
 
 
 def test_custom_headers_fixing_both_auth_headers_skip_derivation():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Authorization": "Bearer apikey"},
         make_endpoint(custom_headers={"Authorization": "Bearer a", "X-Api-Key": "b"}),
         "apikey",
@@ -106,7 +106,7 @@ def test_accept_encoding_strips_unsupported_encodings():
     """br/zstd must not be forwarded: the gateway can only decompress
     gzip/deflate for conversion, and an upstream that picks br makes the
     buffered conversion path fail with a 502 (non-JSON body)."""
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Accept-Encoding": "gzip, deflate, br, zstd"},
         make_endpoint(), "apikey",
     )
@@ -114,7 +114,7 @@ def test_accept_encoding_strips_unsupported_encodings():
 
 
 def test_accept_encoding_only_unsupported_becomes_identity():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Accept-Encoding": "br, zstd"},
         make_endpoint(), "apikey",
     )
@@ -124,7 +124,7 @@ def test_accept_encoding_only_unsupported_becomes_identity():
 def test_accept_encoding_wildcard_not_forwarded():
     """'*' lets the upstream pick any coding (e.g. br) — replace it with
     identity so the response is always decodable."""
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Accept-Encoding": "*"},
         make_endpoint(), "apikey",
     )
@@ -132,7 +132,7 @@ def test_accept_encoding_wildcard_not_forwarded():
 
 
 def test_accept_encoding_from_custom_headers_sanitized():
-    h = _build_upstream_headers(
+    h = _rewrite_headers(
         {"Accept-Encoding": "gzip"},
         make_endpoint(custom_headers={"Accept-Encoding": "gzip, br"}),
         "apikey",

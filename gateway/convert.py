@@ -99,7 +99,7 @@ def get_convert_stats(path: str, pinned_protocol: str | None,
     return ConvertStats(path, FORMAT_TO_PROTOCOL[fmt], target)
 
 
-def convert_request_body(
+def protocol_convert(
     convert_stats: ConvertStats,
     data: dict,
 ) -> dict:
