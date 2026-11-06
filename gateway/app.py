@@ -687,7 +687,9 @@ def build_app(
         # final url
         convert_stats = get_convert_stats(path, endpoint.protocol, source_format)
         upstream_path_ = convert_stats.get_target_path()
-        upstream_url = endpoint.base_url + upstream_path_
+        upstream_url = endpoint.base_url
+        if upstream_path_ not in endpoint.base_url:
+            upstream_url += upstream_path_
         if request.url.query:
             upstream_url += "?" + request.url.query
 
